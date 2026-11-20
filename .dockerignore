@@ -1,0 +1,13 @@
+.git
+.claude
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+.env
+.env.*
+docs
+local_agent
+backend/tests

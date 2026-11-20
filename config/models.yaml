@@ -1,0 +1,98 @@
+# Seeded model records (docs/schemas.md section 4, docs/api.md "Object shapes").
+#
+# One model only since 20 Nov 2026 (team lead): Google's CircularNet. The Ultralytics YOLO
+# record, its seed weights and MobileSAM were removed from the product that evening.
+#
+# Where each fact comes from - nothing here is guessed:
+#   circularnet_rfdetr
+#     licence      Apache-2.0: LICENSE at the root of github.com/tensorflow/models (read 20 Nov 2026).
+#     task, RF-DETR: README of official/projects/waste_identification_ml ("built using RF-DETR").
+#                  RF-DETR itself is Roboflow's architecture and library (Apache-2.0 for this
+#                  size); CircularNet is Google's model built on it. Say it that way.
+#     input_size   432: the Triton config shipped with Google's published ONNX
+#                  (input [1,3,432,432]), as recorded in the camera dashboard's onnx_stage2.py.
+#     classes      the 50 names in labels50.csv shipped with that ONNX.
+#     variant      RFDETRSegMedium: read from the shipped ONNX (12 backbone layers at 384,
+#                  5 decoder layers) - camera dashboard HANDOFF.md section 4.3.
+#   min_gpu_memory_gb is null: the source does not state one, so the UI shows
+#   "not stated by the source" (unverified_fields).
+#   seed: the weights a project labels with before it has trained its own model.
+#     onnx_key  Google's published ONNX, as downloaded. A path inside the bucket.
+#     pt_key    the starting point for training: a PyTorch checkpoint rebuilt from that same
+#               ONNX by the dashboard's tools/circularnet_onnx_to_pth.py, because Google's own
+#               checkpoint download answers HTTP 403 (HANDOFF.md section 4.4). 416 of 572
+#               parameters are CircularNet's; the rest keep RF-DETR's COCO values; the class
+#               head is new, because the classes are the project's.
+models:
+- id: circularnet_rfdetr
+  name: CircularNet
+  task: instance segmentation
+  input_size: 432
+  dataset_format: coco_json
+  licence: Apache-2.0
+  licence_notice: null
+  min_gpu_memory_gb: null
+  source_url: https://github.com/tensorflow/models/tree/master/official/projects/waste_identification_ml
+  source: seeded
+  unverified_fields:
+  - min_gpu_memory_gb
+  can_prelabel: true
+  can_train: true
+  classes:
+  - Aluminium_Can
+  - Aluminium_Foil
+  - Battery
+  - Brush
+  - Bulb
+  - Fiber_Cardboard
+  - Fiber_Cup-&-glass
+  - Fiber_Paper
+  - Footwear
+  - Glass_Bottle
+  - Lighter
+  - Metals
+  - Metals_Bottle
+  - Metals_Container
+  - Metals_Lid
+  - Plastics-ABS_Electronics
+  - Plastics-HDPE_Bottle
+  - Plastics-HDPE_Container
+  - Plastics-HDPE_Lid
+  - Plastics-HDPE_Toys
+  - Plastics-HDPE_Tube
+  - Plastics-LDPE_Flexibles
+  - Plastics-MLP_Flexibles
+  - Plastics-MLP_Tube
+  - Plastics-PC_CD
+  - Plastics-PC_Goggles
+  - Plastics-PET_Blister-pack
+  - Plastics-PET_Bottle
+  - Plastics-PET_Container
+  - Plastics-PET_Cup-&-glass
+  - Plastics-PP
+  - Plastics-PP_Comb
+  - Plastics-PP_Container
+  - Plastics-PP_Cup-&-glass
+  - Plastics-PP_Pen
+  - Plastics-PP_Spoon
+  - Plastics-PP_Straw
+  - Plastics-PP_Tray
+  - Plastics-PS
+  - Plastics-PS_Container
+  - Plastics-PS_Cup-&-glass
+  - Plastics-PS_Flexibles
+  - Plastics-PS_Hangers
+  - Plastics-PVC_Flexibles
+  - Plastics-PVC_Pipe
+  - Plastics-Tetrapak_Carton
+  - Textile_Clothes
+  - Textile_Flexibles
+  - Tire
+  - Wood
+  seed:
+    onnx_key: seed/circularnet_rfdetr/cn_segmentation.onnx
+    decoder: rfdetr_seg
+    input_size: 432
+    first_class_index: 1
+    pt_key: seed/circularnet_rfdetr/checkpoint_circularnet_recovered.pth
+    variant: RFDETRSegMedium

@@ -1,0 +1,26 @@
+# Cloud Build config for the trainer images. Used by infra/deploy_trainer.sh.
+#   _DOCKERFILE  workers/trainer/Dockerfile.base  or  workers/trainer/Dockerfile
+#   _IMAGE       the image to build and push
+#   _BASE_IMAGE  the dependency base (only read by workers/trainer/Dockerfile)
+#   _VERSION     version label baked into the image
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - ${_DOCKERFILE}
+      - --build-arg
+      - BASE_IMAGE=${_BASE_IMAGE}
+      - --build-arg
+      - APP_VERSION=${_VERSION}
+      - -t
+      - ${_IMAGE}
+      - .
+images:
+  - ${_IMAGE}
+timeout: 2400s
+# The default builder is used on purpose: a larger machine type was refused on this project
+# ("due to quota restrictions, Cloud Build cannot run builds of this machine type in this
+# region", 20 Nov 2026).
+options:
+  logging: CLOUD_LOGGING_ONLY

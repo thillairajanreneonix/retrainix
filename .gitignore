@@ -1,0 +1,40 @@
+# Secrets - never commit
+.env
+.env.*
+!.env.example
+*.key
+*-credentials.json
+service-account*.json
+application_default_credentials.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Model weights and data - these live in Cloud Storage, not git
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+*.tfrecord
+*.mp4
+data/
+datasets/
+runs/
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

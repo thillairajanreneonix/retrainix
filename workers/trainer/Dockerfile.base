@@ -1,0 +1,33 @@
+# Retrainix trainer - BASE image: the heavy dependencies only (CPU PyTorch + rfdetr, the
+# library CircularNet is fine-tuned with). Built rarely. The code goes on top in
+# workers/trainer/Dockerfile, which builds in a minute or two.
+#
+#   bash infra/deploy_trainer.sh --apply --base
+#
+# CPU-only on purpose: this project has no usable GPU quota (CLAUDE.md). The CPU wheels are
+# also a fraction of the size of the CUDA ones.
+#
+# NOT YET BUILT in Cloud Build (written 20 Nov 2026, while the project's billing was off).
+# The same pins were installed and run on the build PC: rfdetr 1.5.2, torch 2.15.0 (CPU),
+# opencv-python-headless 4.x. The first cloud build is the test of this file.
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+# OpenCV needs glib at run time; libGL in case a dependency pulls the non-headless build.
+RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /srv
+# The API's own pinned requirements, so the worker code behaves the same in both images.
+COPY backend/requirements.txt backend/requirements.txt
+# rfdetr is pinned to the version the camera dashboard fine-tuned CircularNet with
+# (HANDOFF.md section 4); that project also found it needs OpenCV below 5. The API pins
+# OpenCV 5, so that one line is left out here and OpenCV 4 is installed instead - the rest
+# of the pinned list is the same in both images.
+RUN grep -v -i '^opencv-python' backend/requirements.txt > /tmp/requirements.trainer.txt \
+    && pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+      -r /tmp/requirements.trainer.txt torch torchvision "rfdetr==1.5.2" "opencv-python-headless<5" onnx \
+    && python -c "import torch, torchvision, rfdetr, onnx, onnxruntime, cv2, google.cloud.firestore; \
+from importlib.metadata import version; \
+print('torch', torch.__version__, 'cuda', torch.cuda.is_available(), '| rfdetr', version('rfdetr'), '| cv2', cv2.__version__, '| onnx', onnx.__version__)"
+ENV MPLCONFIGDIR=/tmp/matplotlib

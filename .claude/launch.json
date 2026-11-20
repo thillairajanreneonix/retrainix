@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "retrainix-local",
+      "runtimeExecutable": "C:/Users/Reneonix/AppData/Local/retrainix/backend-venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8080", "--app-dir", "backend"],
+      "port": 8080
+    },
+    {
+      "name": "retrainix-local-with-training",
+      "runtimeExecutable": "C:/Users/Reneonix/AppData/Local/retrainix/rfdetr-venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8081", "--app-dir", "backend"],
+      "port": 8081
+    }
+  ]
+}

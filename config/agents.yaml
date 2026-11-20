@@ -1,0 +1,227 @@
+# Retrainix - runtime agent rules
+# Loaded by the orchestrator at start-up. Matches plan.md section 5.
+# Values marked "suggested default" are starting points chosen for the Buildathon MVP - tune after the first real run.
+# Only the bucket name still needs your GCP project id.
+# Amended 20 Nov 2026 for plan.md section 0 (Amendment A1): the project's own model pre-labels video frames
+# (SAM 3 retired from the MVP), training is a containerised GPU job, and a retrain schedule was added.
+
+version: 1
+product: Retrainix
+
+defaults:
+  region: "asia-south1"                      # Mumbai. Confirm GPU + Colab Enterprise availability here; fallback asia-southeast1 (Singapore)
+  bucket: "retrainix-data-[YOUR_GCP_PROJECT_ID]"   # bucket names are global, so include your project id
+  log_every_decision: true
+  dry_run: false
+
+models:
+  gemini_bulk: "gemini-3.8-flash"           # Flash-class: bulk QA + Google Search grounding. Re-check id in Gemini API docs
+  gemini_hard: "gemini-3.1-pro-preview"     # Pro-class: hard cases only. Preview id - re-check before the event
+  sam: "facebook/sam3"                       # gated on Hugging Face; needs HF_TOKEN. NOT used in the MVP since A1.1
+
+limits:
+  gemini_max_calls_per_project: 2000        # suggested default: ~500 images x up to 3 rounds + margin
+  max_images_per_project: 1000              # suggested default for the MVP
+  gpu_job_max_minutes: 120                  # suggested default: hard stop for any single GPU job
+  max_upload_mb: 1024                       # suggested default: largest single upload
+
+agents:
+
+  orchestrator:
+    mvp: true
+    uses_llm: false
+    input: project_state
+    output: next_step, status_events
+    states: [created, model_selected, compute_ready, data_uploaded, labelling, qa, dataset_ready, training, evaluated, failed]
+    schedule:                                         # A1.5
+      tick_minutes: 15                                # suggested default: how often Cloud Scheduler calls /internal/tick
+      min_interval_hours: 1                           # suggested default: shortest retrain interval a project may set
+      min_new_approved_images: 20                     # suggested default: fewer new approved images than this -> skip the retrain
+    rules:
+      - every transition is written to Firestore with a timestamp
+      - no step starts unless the previous step's output exists
+      - stop the pipeline when any limit in `limits` is reached
+      - on agent error retry once, then set state to failed and notify
+      - a scheduled retrain starts only when the interval has elapsed AND approved labels were added since the last model version
+      - never start a second training job for a project while one is queued or running
+
+  model_catalogue:
+    mvp: true
+    uses_llm: true
+    model: gemini_bulk
+    tools: [google_search]
+    input: user_query
+    output: model_records
+    required_fields: [name, task, input_size, dataset_format, licence, min_gpu_memory_gb, source_url]
+    rules:
+      - search with Grounding with Google Search, keep the cited source URLs
+      - fetch each model card and extract required_fields
+      - mark a record verified only when every required field came from the model card
+      - only verified records with a supported training recipe are listed
+      - always show licence and source URL to the user
+    supported_recipes: [circularnet_rfdetr]           # one model since 20 Nov 2026 (team lead): Google's CircularNet. Ultralytics YOLO was removed
+    default_prelabel_recipe: circularnet_rfdetr       # A1.3
+    train_first_recipe: circularnet_rfdetr            # the only recipe
+
+  hardware_profiler:
+    mvp: false                                        # stretch
+    uses_llm: false
+    input: local_machine
+    output: hardware_report, feasible
+    rules:
+      - read GPU name, VRAM, CUDA version, RAM, free disk
+      - feasible when VRAM >= model.min_gpu_memory_gb and free disk >= 2x dataset size
+      - not feasible -> recommend Colab
+
+  env_provisioner:
+    mvp: true
+    uses_llm: false
+    input: model_record, compute_choice
+    output: runtime_handle
+    compute_targets: [cloud_run_job_gpu, compute_engine_vm, vertex_custom_job]   # A1.4: pick one after the quota check. stretch: local_venv
+    rules:
+      - use the container image pinned for the model family
+      - the same worker container must run unchanged on every compute target; it receives only project_id and job_id
+      - free Colab is never automated; return an Open-in-Colab link instead
+      - always tear down idle runtimes
+
+  data_intake:
+    mvp: true
+    uses_llm: false
+    input: uploads
+    output: image_records, gold_split
+    gold_set:
+      required_images: 30
+      min_examples_per_class: 5
+      exemplar_count: 20
+      holdout_count: 10
+    video:                                            # A1.2
+      sample_every_seconds: 1.0                       # suggested default: one frame per second of video
+      max_frames_per_video: 300                       # suggested default
+      phash_max_distance: 4                           # suggested default: frames closer than this are duplicates
+      min_blur_ratio: 0.5                             # suggested default: a frame is blurry when its sharpness (variance of Laplacian) is under this share of the video's own median. Relative on purpose - a dark belt scores low even when sharp
+    rules:
+      - reject unreadable files, de-duplicate by perceptual hash, drop blurry frames
+      - one capture session per uploaded video; frames keep their video's session id
+      - convert gold labels (YOLO or COCO) to the master label format
+      - split by capture session, never by adjacent frames
+      - gold images and labels are read-only after import
+
+  synthetic_data:
+    mvp: false                                        # stretch
+    uses_llm: true
+    input: class_names, cutouts
+    output: labelled_images
+    rules:
+      - composite cut-outs on backgrounds with random position, scale, rotation, lighting
+      - tag every image source=synthetic
+      - never place synthetic images in the test split
+
+  annotator_model:                                    # A1.1 - replaces annotator_sam3
+    mvp: true
+    uses_llm: false
+    input: image, project_classes, class_map
+    output: boxes, masks_if_available, scores
+    cross_class_nms_iou: 0.7                          # suggested default: two different classes on boxes overlapping more than this are one object; the higher score is kept
+    profiles:                                         # tried in order; a retry moves to the next one
+      default:        {conf: 0.35, tiled: false}      # suggested default
+      tiled_lowconf:  {conf: 0.20, tiled: true, tile_cols: 3, tile_rows: 2, tile_overlap: 0.2, nms_iou: 0.5}   # suggested default; tiling values are the camera dashboard's
+    rules:
+      - pre-label with the project's active model version; before the first version exists, use the seed weights of prelabel_recipe
+      - map model classes to project classes through the project's class_map; drop unmapped classes and count them
+      - write results in the master label format with source=model and the label_model that produced them
+      - on retry use the next profile and apply the class fixes from teacher_qa
+      - never write to an image with a gold role
+
+  teacher_qa:
+    mvp: true
+    uses_llm: true
+    model: gemini_bulk
+    escalate_model: gemini_hard
+    input: image, labels, gold_examples
+    output: verdict
+    thresholds:
+      holdout_iou_min: 0.75                   # suggested default (mean IoU on the 10 hold-out gold images)
+      min_mask_area_px: 100                   # suggested default: smaller masks are treated as noise
+      max_retries: 2
+      gold_examples_in_prompt: 2              # was 4 until 20 Nov: with 4 reference photos one call took ~75 s; fewer photos, faster call
+      max_missed_objects: 0                   # suggested default: a frame fails when Gemini counts more unboxed objects than this
+      min_fix_confidence: medium              # suggested default: Gemini remarks below this confidence change nothing (low | medium | high)
+      max_object_area_ratio: 0.5              # suggested default: a box covering more than this share of the frame fails the rule check
+      added_object_max_iou: 0.3               # suggested default: on a retry, a newly found object is added only if it overlaps no existing one by more than this
+      gemini_parallel: 12                     # suggested default: Gemini calls in flight at once (one call measured at ~23 s, 20 Nov)
+    response_schema:
+      verdict: [pass, fail]
+      class_ok: boolean
+      missed_objects: integer
+      bad_masks: list
+      hints: object
+    rules:
+      - step A - pre-label the 10 hold-out gold images and compute box IoU against the human labels; below holdout_iou_min, stop and report before the full run
+      - step B - cheap checks first (empty mask, area, count outliers), then Gemini review
+      - Gemini must return JSON matching response_schema; invalid JSON -> one retry -> human review
+      - fail -> send hints to annotator_model; after max_retries -> human_review_router
+      - never modify gold labels
+      - record model id, prompt version, round and verdict for every image
+
+  human_review_router:
+    mvp: true
+    uses_llm: false
+    input: failed_images
+    output: corrected_labels
+    rules:
+      - queue images that failed max_retries or had invalid QA output
+      - reviewer actions - accept, reject, fix class
+      - store corrections with source=human; sample a few percent of passed images for spot checks
+
+  dataset_compiler:
+    mvp: true
+    uses_llm: false
+    input: master_labels, model_record
+    output: dataset_version
+    formats:
+      circularnet_rfdetr: {format: coco_json, imgsz: 432}            # A1.3; 432 is CircularNet's native input. Layout: train/ valid/ test/, each with _annotations.coco.json beside its images
+      rtdetr: {format: coco_json, imgsz: 640}                        # stretch
+      resnet50_cls: {format: imagefolder_crops, imgsz: 224}          # stretch
+      circularnet: {format: tfrecord}                                # stretch
+    split: {train: 0.7, val: 0.2, test: 0.1, by: capture_session}
+    rules:
+      - originals are never resized in storage
+      - gold hold-out images are never in any dataset version; they are the fixed exam for every model version
+      - each export is a new immutable version under datasets/v<n>
+      - validate the export with the target framework's own loader before marking it ready
+
+  trainer:
+    mvp: true
+    uses_llm: false
+    input: dataset_version, model_record, runtime_handle
+    output: weights, metrics
+    epochs: 3                                         # suggested default for CPU; see CLAUDE.md "Training as built" for the measured time per epoch
+    batch: 2                                          # the camera dashboard's CircularNet setting (HANDOFF.md 4.3): batch 2 ...
+    grad_accum_steps: 4                               # ... with gradients accumulated over 4 steps
+    compute_note: "Cloud Run job, 8 vCPU, CPU only"    # shown to the user before a run; this project has no usable GPU quota (CLAUDE.md)
+    rules:
+      - launch the worker container on the compute target chosen by env_provisioner (A1.4)
+      - start from the previous model version's weights, or the recipe's seed weights for the first run
+      - save checkpoints, final weights and metrics to the project GCS path
+      - stream progress events; stop at gpu_job_max_minutes
+
+  evaluator_reporter:
+    mvp: true
+    uses_llm: false
+    input: weights, test_split
+    output: report
+    metrics: [map50, map50_95, per_class_recall]
+    rules:
+      - evaluate every model version on the same frozen gold hold-out, so versions are comparable (A1.6)
+      - version 0 is the seed weights scored before any training; it is the baseline of the trend
+      - report every metric with image and object counts
+      - export weights (.pt, ONNX) with the report
+
+  notifier:
+    mvp: true
+    uses_llm: false
+    input: events
+    output: messages
+    events: [dataset_ready, training_done, needs_human_review, pipeline_failed]
+    channels: [in_app]                                # stretch: email
