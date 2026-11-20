@@ -4,7 +4,7 @@ import { Alert, Box, Button, FormControlLabel, Switch, Typography } from "@mui/m
 import VideocamOutlinedIcon from "@mui/icons-material/VideocamOutlined";
 import VideocamOffOutlinedIcon from "@mui/icons-material/VideocamOffOutlined";
 import { api, ApiError, errorMessage, type PredictResult, type Project } from "../api";
-import { cameraProblemFrom, cameraUnavailable, type CameraProblem, type ChosenCamera } from "../camera";
+import { cameraProblemFrom, cameraUnavailable, rememberChosenCamera, type CameraProblem, type ChosenCamera } from "../camera";
 import { formatCount, inClassOrder, plural } from "../format";
 import { rx } from "../theme";
 import { colourFor } from "./FrameReviewDialog";
@@ -71,6 +71,94 @@ async function grabFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement): Pr
   const jpeg = await toJpeg(canvas, 0.85);
   // A very detailed picture can come out large; a second, stronger compression keeps it under the limit.
   return jpeg.size <= MAX_FRAME_BYTES ? jpeg : toJpeg(canvas, 0.6);
+}
+
+type Choosing =
+  | { phase: "idle" }
+  | { phase: "asking" }
+  | { phase: "pick"; cameras: ChosenCamera[] }
+  | { phase: "error"; problem: CameraProblem };
+
+/**
+ * The first step on the Dashboard when this browser has no camera yet: ask the browser for the
+ * camera, and with more than one attached let the person pick. Only its id and name are kept.
+ */
+function CameraChooser() {
+  const [state, setState] = useState<Choosing>({ phase: "idle" });
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
+  const ask = async () => {
+    const missing = cameraUnavailable();
+    if (missing) {
+      setState({ phase: "error", problem: missing });
+      return;
+    }
+    setState({ phase: "asking" });
+    try {
+      // Opened only to get permission and the cameras' names; released straight away.
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const track = stream.getVideoTracks()[0];
+      const current: ChosenCamera = { id: track?.getSettings().deviceId ?? "", label: track?.label || "Camera" };
+      stream.getTracks().forEach((t) => t.stop());
+      const cameras = (await navigator.mediaDevices.enumerateDevices())
+        .filter((d) => d.kind === "videoinput" && d.deviceId)
+        .map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` }));
+      if (!alive.current) return;
+      if (cameras.length > 1) {
+        setState({ phase: "pick", cameras });
+        return;
+      }
+      const only = cameras[0] ?? current;
+      if (!only.id) {
+        setState({ phase: "error", problem: cameraProblemFrom(new DOMException("no camera id", "NotFoundError")) });
+        return;
+      }
+      rememberChosenCamera(only);
+    } catch (err) {
+      if (alive.current) setState({ phase: "error", problem: cameraProblemFrom(err) });
+    }
+  };
+
+  return (
+    <Box sx={{ display: "grid", gap: 2, px: { xs: 2, sm: 3 }, pb: 3 }}>
+      <EmptyState
+        icon={<VideocamOutlinedIcon fontSize="large" />}
+        title="First, choose the camera"
+        action={
+          state.phase === "pick" ? undefined : (
+            <Button variant="contained" startIcon={<VideocamOutlinedIcon />} disabled={state.phase === "asking"} onClick={() => void ask()}>
+              {state.phase === "asking" ? "Asking the browser…" : "Choose a camera"}
+            </Button>
+          )
+        }
+      >
+        The camera attached to this computer is shown live here. While "Label with the model" is on, a still frame of
+        it leaves this computer every few seconds: it is sent to the Retrainix service, labelled by the model there,
+        and not stored. The browser will ask for permission.
+      </EmptyState>
+      {state.phase === "pick" && (
+        <Box role="group" aria-label="Cameras on this computer" sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, justifyContent: "center" }}>
+          {state.cameras.map((c) => (
+            <Button key={c.id} variant="outlined" onClick={() => rememberChosenCamera(c)} sx={{ maxWidth: "100%", overflowWrap: "anywhere" }}>
+              {c.label}
+            </Button>
+          ))}
+        </Box>
+      )}
+      {state.phase === "error" && (
+        <Alert severity="error" role="alert" sx={{ overflowWrap: "anywhere" }}>
+          <Box sx={{ fontWeight: 500 }}>{state.problem.title}</Box>
+          {state.problem.detail}
+        </Alert>
+      )}
+    </Box>
+  );
 }
 
 /**
@@ -250,24 +338,7 @@ export default function LiveCameraView({ project, camera, setupLink }: { project
     return () => window.clearInterval(timer);
   }, [live, labelling]);
 
-  if (!camera) {
-    return (
-      <Box sx={{ px: { xs: 2, sm: 3 }, pb: 3 }}>
-        <EmptyState
-          icon={<VideocamOutlinedIcon fontSize="large" />}
-          title="No camera chosen yet"
-          action={
-            <Button variant="contained" component={RouterLink} to={setupLink}>
-              Choose a camera
-            </Button>
-          }
-        >
-          On the Project setup screen, press Record from camera and pick the camera. The same camera is then shown
-          live here, and the model labels what it sees.
-        </EmptyState>
-      </Box>
-    );
-  }
+  if (!camera) return <CameraChooser />;
 
   const ageMs = labelled ? Math.max(0, now - labelled.at) : 0;
   // If the camera has changed the shape of its picture since, the outlines no longer fit it.

@@ -92,12 +92,13 @@ type BeltMode = "camera" | "frame";
 
 /**
  * The belt, two ways: live from the camera chosen on Project setup, or a stored frame of this
- * project with the labels its latest label file holds drawn over it. Live is shown first once a
- * camera has been chosen.
+ * project with the labels its latest label file holds drawn over it. Live is shown first; with
+ * no camera chosen yet, that view asks for one.
  */
 function FramePanel({ project, images }: { project: Project; images: Load<Image[]> }) {
   const camera = useChosenCamera();
-  const [mode, setMode] = useState<BeltMode>(() => (readChosenCamera() ? "camera" : "frame"));
+  // Camera first: with no camera chosen yet, the card opens on choosing one.
+  const [mode, setMode] = useState<BeltMode>("camera");
   const [showLabels, setShowLabels] = useState(true);
   // The frame with the most labelled objects among the first few: a full belt says more than an empty one.
   const frame =
@@ -422,6 +423,36 @@ function MaterialCount({ project }: { project: Project }) {
   );
 }
 
+/** The API's estimate of hand-annotation time saved. Always shown as an estimate, with its basis. */
+function SavingCard({ summary }: { summary: Load<QaSummary> }) {
+  const s = summary.status === "ready" ? (summary.data.annotation_saving ?? null) : null;
+  const usable = s && typeof s.minutes === "number" && typeof s.machine_outlines === "number" && typeof s.assumed_seconds_per_outline === "number";
+  return (
+    <Card component="section" aria-labelledby="dash-saving-title">
+      <CardContent sx={{ display: "grid", gap: 0.75, p: 2 }}>
+        <SectionTitle id="dash-saving-title">HUMAN ANNOTATION SAVED (ESTIMATE)</SectionTitle>
+        {summary.status === "loading" && <Typography color="text.secondary">loading…</Typography>}
+        {summary.status === "error" && <Typography color="text.secondary">could not be loaded</Typography>}
+        {summary.status === "ready" && !usable && <Typography color="text.secondary">The API gave no estimate.</Typography>}
+        {usable && (
+          <>
+            <Typography sx={{ fontSize: "2.125rem", fontWeight: 700, lineHeight: 1.2, fontVariantNumeric: "tabular-nums" }}>
+              {s.minutes >= 100 ? formatCount(Math.round(s.minutes)) : s.minutes.toFixed(1)}{" "}
+              <Box component="span" sx={{ fontSize: "0.875rem", fontWeight: 400, color: "text.secondary" }}>
+                minutes, estimated
+              </Box>
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
+              {plural(s.machine_outlines, "outline", "outlines")} drawn by the model × {formatCount(s.assumed_seconds_per_outline)} s assumed
+              per hand-drawn outline. An assumption, not a measurement; review time is not subtracted.
+            </Typography>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /** What is true right now: which weights label, whether Gemini answers, and the retrain schedule. */
 function StatusCard({ project, versions }: { project: Project; versions: Load<ModelVersion[]> }) {
   const [gemini] = useLoad(() => api.geminiStatus(), []);
@@ -464,7 +495,8 @@ function StatusCard({ project, versions }: { project: Project; versions: Load<Mo
 /**
  * The front page for one project, laid out like the Reneonix camera dashboard: the belt on the
  * left, the material count on the right, and under the belt where the retraining loop stands.
- * Every figure comes from the API; nothing on this page is live video.
+ * Every figure comes from the API. The belt card can also show the chosen camera live, with the
+ * model labelling a still frame of it every few seconds (LiveCameraView).
  */
 export default function DashboardPage({ pid }: { pid: string }) {
   const navigate = useNavigate();
@@ -529,6 +561,7 @@ export default function DashboardPage({ pid }: { pid: string }) {
         </Stack>
         <Stack spacing={{ xs: 2, md: 3 }} sx={{ minWidth: 0 }}>
           <MaterialCount project={p} />
+          <SavingCard summary={summary} />
           <StatusCard project={p} versions={versions} />
         </Stack>
       </Box>

@@ -167,7 +167,8 @@ function NewProjectForm({ onCancel }: { onCancel?: () => void }) {
   const [models, reloadModels] = useLoad(() => api.listModels(), []);
 
   const [name, setName] = useState("");
-  const [classes, setClasses] = useState<string[]>([]);
+  // A small starting set; the person can remove any of them or add their own before creating.
+  const [classes, setClasses] = useState<string[]>(["plastic", "glass", "metal", "paper"]);
   const [classDraft, setClassDraft] = useState("");
   const [prelabelId, setPrelabelId] = useState("");
   const [trainId, setTrainId] = useState("");
@@ -254,7 +255,8 @@ function NewProjectForm({ onCancel }: { onCancel?: () => void }) {
             New project
           </Typography>
           <Typography color="text.secondary">
-            Classes are fixed once the project is created; their order is the class index in every export.
+            Start with a few classes. A project can be created with any number of classes; adding classes to an
+            existing project is not built yet. Their order is the class index in every export.
           </Typography>
         </Box>
 

@@ -376,6 +376,14 @@ export type QaSummary = {
   // Boxes with no outline, on frames that are not gold; absent = none. The `outline` job draws
   // them with SAM; a box left without one is exported as its rectangle.
   outlines?: { frames_missing: number; objects_missing: number };
+  // An estimate, never a measurement: outlines the model drew x an assumed time to draw one by hand.
+  annotation_saving?: {
+    machine_outlines: number;
+    frames: number;
+    assumed_seconds_per_outline: number;
+    minutes: number;
+    basis?: string;
+  };
 };
 
 // `result` of an outline job; also under "outlines" in a train job result that drew some.
