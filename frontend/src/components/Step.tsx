@@ -11,8 +11,9 @@ export function StepTitle({ n, id, children }: { n: number; id: string; children
       <Box
         aria-hidden
         sx={{
-          width: 32,
-          height: 32,
+          width: 28,
+          height: 28,
+          fontSize: "0.8125rem",
           flexShrink: 0,
           borderRadius: "50%",
           bgcolor: "primary.main",
@@ -24,7 +25,7 @@ export function StepTitle({ n, id, children }: { n: number; id: string; children
       >
         {n}
       </Box>
-      <Typography id={id} variant="h5" component="h3">
+      <Typography id={id} variant="h5" component="h3" tabIndex={-1} sx={{ scrollMarginTop: "96px", "&:focus": { outline: "none" } }}>
         <Box component="span" sx={srOnly}>
           Step {n}:{" "}
         </Box>
@@ -71,7 +72,7 @@ export function JobProgress({
         variant={job.status === "running" && total > 0 ? "determinate" : "indeterminate"}
         value={total > 0 ? Math.min(100, (done / total) * 100) : undefined}
         aria-label={`${name} progress`}
-        sx={{ mt: 0.75, height: 8, borderRadius: "4px" }}
+        sx={{ mt: 0.75, height: 8 }}
       />
       {pollError && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>

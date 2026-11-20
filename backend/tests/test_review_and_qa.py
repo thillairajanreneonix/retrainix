@@ -100,8 +100,8 @@ def test_fix_rules_and_reject(client, labelled):
     assert (counts["human_done"], counts["rejected"]) == (2, 0)
 
 
-def test_boxes_without_an_outline_are_only_counted(client, labelled):
-    # Nothing draws outlines since MobileSAM was removed (20 Nov 2026); the screens still say how many are missing.
+def test_boxes_without_an_outline_are_counted(client, labelled):
+    # The screens say how many boxes still wait for an outline (tests/test_outliner.py covers drawing them).
     pid, ids = labelled
     assert client.get(f"/api/projects/{pid}/qa/summary").json()["outlines"] == {"frames_missing": 0, "objects_missing": 0}
     assert client.get(f"/api/projects/{pid}/gold").json()["boxes_without_outline"] == 0

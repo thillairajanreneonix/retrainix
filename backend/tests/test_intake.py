@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 
 from agents import data_intake
-from app import jobs, worker
 from tests.conftest import upload_video
 
 
@@ -180,18 +179,3 @@ def test_an_unknown_job_type_is_refused(client, project):
     assert client.post(f"/api/projects/{pid}/jobs", json={"type": "nonsense"}).status_code == 422
     # extract_frames and evaluate are started by the app itself, never by a user.
     assert client.post(f"/api/projects/{pid}/jobs", json={"type": "evaluate"}).status_code == 422
-
-
-def test_an_outline_job_is_refused_because_that_job_type_no_longer_exists(client, project):
-    # MobileSAM outlining was removed on 20 Nov 2026; nothing draws outlines as a job any more.
-    pid = project["id"]
-    for body in ({"type": "outline"}, {"type": "outline", "dry_run": True}):
-        refused = client.post(f"/api/projects/{pid}/jobs", json=body)
-        assert refused.status_code == 422, body
-        error = refused.json()["error"]
-        assert error["code"] == "invalid_request"
-        # The message lists what may be started, and outline is not among it.
-        assert error["message"].startswith("type: must be one of ") and "outline" not in error["message"]
-    assert client.get(f"/api/projects/{pid}/jobs").json()["jobs"] == []  # nothing was queued
-    # Not a hidden type either: no job type of that name, and no handler a worker could run.
-    assert "outline" not in jobs.ALL_JOB_TYPES and "outline" not in worker.HANDLERS

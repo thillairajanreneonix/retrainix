@@ -12,11 +12,14 @@ import {
   Typography,
 } from "@mui/material";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
-import type { Project, QaSummary } from "../api";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlineOutlined";
+import { api, type Project, type QaSummary } from "../api";
 import { formatCount, plural, readNumber } from "../format";
-import { useStepJob, type Load } from "../hooks";
+import { useLoad, useStepJob, type Load } from "../hooks";
 import { ErrorRow, LoadingRow } from "./States";
 import { JobEnded, JobProgress, StepTitle, WaitingNote } from "./Step";
+import { StatusBadge } from "./ui";
 
 /** "28 frames, at most 84 Gemini calls (2,000 remaining of the project cap), no GPU time" */
 function estimateSentence(estimate: Record<string, unknown>, cap: number | null): string | null {
@@ -119,6 +122,36 @@ function QaOutcome({ result }: { result: Record<string, unknown> }) {
   );
 }
 
+/** Whether Gemini answers right now, as the API just measured it. Never assumed. */
+function GeminiAvailability() {
+  const [status, recheck] = useLoad(() => api.geminiStatus(), []);
+  return (
+    <Box role="status" sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+      {status.status === "loading" && <StatusBadge>Asking whether Gemini answers…</StatusBadge>}
+      {status.status === "error" && (
+        <StatusBadge tone="warning" icon={<ErrorOutlineIcon aria-hidden />}>
+          Gemini availability unknown: {status.message}
+        </StatusBadge>
+      )}
+      {status.status === "ready" && status.data.ok && (
+        <StatusBadge tone="success" icon={<CheckCircleOutlineIcon aria-hidden />}>
+          Gemini is answering{status.data.model ? ` (${status.data.model})` : ""}
+        </StatusBadge>
+      )}
+      {status.status === "ready" && !status.data.ok && (
+        <StatusBadge tone="error" icon={<ErrorOutlineIcon aria-hidden />}>
+          Gemini is not answering{status.data.error ? `: ${status.data.error}` : ""}
+        </StatusBadge>
+      )}
+      {status.status !== "loading" && (
+        <Button size="small" onClick={recheck}>
+          Check again
+        </Button>
+      )}
+    </Box>
+  );
+}
+
 /**
  * Step 5: Gemini reviews each waiting frame's labels. A dry run comes first and its estimate,
  * with the worst-case number of Gemini calls, is confirmed before the real run starts.
@@ -164,6 +197,8 @@ export default function GeminiCheckCard({
             corrected and checked again; if it still fails it goes to a person.
           </Typography>
         </Box>
+
+        <GeminiAvailability />
 
         {summary.status === "loading" && <LoadingRow label="Loading the QA summary…" />}
         {summary.status === "error" && (

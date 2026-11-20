@@ -9,6 +9,8 @@ import numpy as np
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel, Field
 
+from agents import outliner
+
 from .. import jobs
 from ..deps import get_blobs, get_store
 from ..errors import APIError, not_found
@@ -63,6 +65,11 @@ def _check_can_start(store: Any, project_id: str, job_type: str) -> None:
             raise APIError(409, "conflict", "The hold-out is already being scored")
         if not project["counts"].get("gold_holdout"):
             raise APIError(409, "conflict", "Freeze the gold set first: there is no hold-out to score against")
+    elif job_type == "outline":
+        if busy(store, project_id, "outline"):
+            raise APIError(409, "conflict", "Outlines are already being drawn")
+        if not outliner.images_missing(store, project_id):
+            raise APIError(409, "conflict", "No object is missing an outline")
     elif job_type == "compile":
         if busy(store, project_id, "compile"):
             raise APIError(409, "conflict", "A dataset is already being compiled")

@@ -18,22 +18,6 @@ def missing_outlines(label: dict[str, Any]) -> int:
     return sum(1 for o in label["objects"] if o.get("polygon_xy") is None)
 
 
-# Frames whose labels a person can still change. Gold frames are read-only and never listed.
-EDITABLE = ("predicted", "passed", "human_review", "human_done")
-
-
-def images_missing_outlines(store: Any, project_id: str) -> list[dict[str, Any]]:
-    """Frames that are not gold and have at least one object with a box but no outline.
-    Nothing draws those outlines since MobileSAM was removed (20 Nov 2026): the dataset
-    export writes such an object as its box. This only counts them, so the screen can say so."""
-    return [
-        i for i in store.list(f"projects/{project_id}/images")
-        if i.get("role", "unlabelled") == "unlabelled"
-        and i.get("label_status") in EDITABLE
-        and int(i.get("missing_outlines") or 0) > 0
-    ]  # fmt: skip
-
-
 def read_label(blobs: Any, image: dict[str, Any]) -> dict[str, Any] | None:
     if not image.get("label_key"):
         return None

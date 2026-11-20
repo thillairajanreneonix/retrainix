@@ -19,7 +19,7 @@ BASE=0; for arg in "$@"; do [ "$arg" = "--base" ] && BASE=1; done
 
 REPO="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/cloud-run-source-deploy"
 BASE_IMAGE="$REPO/retrainix-trainer-base:latest"
-VERSION="$(git rev-parse --short HEAD 2>/dev/null || echo dev)-$(date -u +%Y%m%d%H%M)"
+VERSION="$(git describe --tags --always 2>/dev/null || echo dev)-$(date -u +%Y%m%d%H%M)"
 IMAGE="$REPO/retrainix-trainer:$VERSION"
 TRAINER_JOB_NAME="${TRAINER_JOB_NAME:-retrainix-trainer}"
 echo "== Trainer $VERSION, apply=$APPLY, rebuild base=$BASE"

@@ -17,10 +17,11 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import { api, errorMessage, type ModelRecord, type Project } from "../api";
-import { formatDate, humanise, plural } from "../format";
+import { formatCount, formatDate, framesInProject, humanise, plural } from "../format";
 import { useLoad } from "../hooks";
 import ModelCard, { licenceText } from "../components/ModelCard";
 import { EmptyState, ErrorRow, LoadingRow } from "../components/States";
+import { MetricCard, PageHeader, StatusBadge } from "../components/ui";
 
 export default function ProjectsPage() {
   const [projects, reloadProjects] = useLoad(() => api.listProjects(), []);
@@ -41,21 +42,19 @@ export default function ProjectsPage() {
 
   return (
     <Stack spacing={3}>
-      <Stack direction="row" useFlexGap spacing={2} sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", rowGap: 1 }}>
-        <Box>
-          <Typography variant="h4" component="h2">
-            Projects
-          </Typography>
-          <Typography color="text.secondary">
-            One project is one belt: its classes, its footage and the model retrained on it.
-          </Typography>
-        </Box>
-        {!showForm && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openForm}>
-            New project
-          </Button>
-        )}
-      </Stack>
+      <PageHeader
+        title="Projects"
+        subtitle="One project is one belt: its classes, its footage and the model retrained on it."
+        actions={
+          !showForm ? (
+            <Button variant="contained" startIcon={<AddIcon />} onClick={openForm}>
+              New project
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {projects.status === "ready" && projects.data.length > 0 && <Totals projects={projects.data} />}
 
       <section aria-label="Your projects">
         {projects.status === "loading" && <LoadingRow label="Loading projects…" />}
@@ -76,8 +75,8 @@ export default function ProjectsPage() {
               p: 0,
               m: 0,
               display: "grid",
-              gap: 2,
-              gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "repeat(auto-fill, minmax(300px, 1fr))" },
+              gap: { xs: 2, md: 3 },
+              gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "repeat(auto-fill, minmax(320px, 1fr))" },
             }}
           >
             {projects.data.map((p) => (
@@ -90,11 +89,32 @@ export default function ProjectsPage() {
       </section>
 
       {showForm && (
-        <div ref={formRef}>
+        <Box ref={formRef} sx={{ maxWidth: 960, scrollMarginTop: "88px" }}>
           <NewProjectForm onCancel={noProjects ? undefined : () => setFormOpen(false)} />
-        </div>
+        </Box>
       )}
     </Stack>
+  );
+}
+
+/** Sums of what the project list itself returns. Nothing here is estimated. */
+function Totals({ projects }: { projects: Project[] }) {
+  const sum = (pick: (p: Project) => number) => projects.reduce((n, p) => n + (pick(p) || 0), 0);
+  const waiting = sum((p) => p.counts.human_review);
+  return (
+    <Box
+      component="section"
+      aria-label="Totals across your projects"
+      sx={{ display: "grid", gap: { xs: 2, md: 3 }, gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "repeat(3, minmax(0, 1fr))" } }}
+    >
+      <MetricCard label="Projects" value={formatCount(projects.length)} />
+      <MetricCard label="Frames kept from video" value={formatCount(sum((p) => framesInProject(p.counts)))} hint="across all projects" />
+      <MetricCard
+        label="Frames waiting for a person"
+        value={formatCount(waiting)}
+        hint={waiting > 0 ? "sent to review by the label check" : "none in the review queue"}
+      />
+    </Box>
   );
 }
 
@@ -108,10 +128,12 @@ function ProjectCard({ project }: { project: Project }) {
       >
         <CardContent sx={{ display: "grid", gap: 1.5 }}>
           <Stack direction="row" useFlexGap spacing={1} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
-            <Typography variant="h6" component="h3" sx={{ overflowWrap: "anywhere", minWidth: 0 }}>
+            <Typography variant="h5" component="h3" sx={{ overflowWrap: "anywhere", minWidth: 0 }}>
               {project.name}
             </Typography>
-            <Chip size="small" label={humanise(project.state)} sx={{ flexShrink: 0 }} />
+            <Box sx={{ flexShrink: 0 }}>
+              <StatusBadge>{humanise(project.state)}</StatusBadge>
+            </Box>
           </Stack>
           <Box component="ul" aria-label="Classes" sx={{ listStyle: "none", p: 0, m: 0, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
             {project.classes.map((c) => (
@@ -121,7 +143,7 @@ function ProjectCard({ project }: { project: Project }) {
             ))}
           </Box>
           <Typography variant="body2" color="text.secondary">
-            {plural(project.counts.frames, "frame", "frames")} · created{" "}
+            {plural(framesInProject(project.counts), "frame", "frames")} · created{" "}
             <time dateTime={project.created_at}>{formatDate(project.created_at)}</time>
           </Typography>
         </CardContent>

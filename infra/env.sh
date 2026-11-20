@@ -2,7 +2,16 @@
 # Shared, non-secret deployment values. Sourced by every script in /infra.
 # Secrets never go here - they live in Secret Manager.
 
-export GCP_PROJECT_ID="${GCP_PROJECT_ID:-desktop-application-515217}"
+# The project: "retrainix" (number 111360744309), which runs on another person's credits -
+# spend carefully. History: until the evening of 20 Nov 2026 the project was the team lead's
+# own, desktop-application-515217 (number 801692371835), on the event credits. Those lapsed
+# and its billing went off. The team lead named this one at about 23:20 IST, switched back to
+# the old one at 23:58 expecting new credits at midnight, and at 00:10 on 21 Nov said those
+# credits could not be claimed: "keep it in the other person". So this is the project.
+# To deploy anywhere else, set both variables before calling a script, e.g.
+#   GCP_PROJECT_ID=desktop-application-515217 GCP_PROJECT_NUMBER=801692371835 bash infra/deploy.sh
+export GCP_PROJECT_ID="${GCP_PROJECT_ID:-retrainix}"
+export GCP_PROJECT_NUMBER="${GCP_PROJECT_NUMBER:-111360744309}"
 export GCP_REGION="${GCP_REGION:-asia-south1}"          # Mumbai; fallback asia-southeast1
 export GCS_BUCKET="${GCS_BUCKET:-retrainix-data-${GCP_PROJECT_ID}}"
 export SERVICE_NAME="${SERVICE_NAME:-retrainix}"
@@ -12,7 +21,7 @@ export SCHEDULER_JOB_NAME="${SCHEDULER_JOB_NAME:-retrainix-tick}"
 export GEMINI_KEY_SECRET="${GEMINI_KEY_SECRET:-gemini-api-key}"
 # The service's stable address (project number + region). It is the audience the scheduler's
 # identity token is issued for, and what /internal/tick checks.
-export SERVICE_URL="${SERVICE_URL:-https://retrainix-801692371835.asia-south1.run.app}"
+export SERVICE_URL="${SERVICE_URL:-https://${SERVICE_NAME}-${GCP_PROJECT_NUMBER}.${GCP_REGION}.run.app}"
 export API_SA_NAME="${API_SA_NAME:-retrainix-api}"
 export API_SA_EMAIL="${API_SA_NAME}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 export GEMINI_LOCATION="${GEMINI_LOCATION:-global}"     # both models 404 at asia-south1 (20 Nov)

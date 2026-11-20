@@ -6,7 +6,7 @@ from typing import Any, Literal
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from agents import labels, review_router
+from agents import labels, outliner, review_router
 
 from ..deps import get_blobs, get_store
 from ..errors import APIError, not_found
@@ -97,7 +97,7 @@ def qa_summary(project_id: str) -> dict[str, Any]:
             last_qa = job["result"]
             break
     cap = load_agents_config()["limits"]["gemini_max_calls_per_project"]
-    no_outline = labels.images_missing_outlines(store, project_id)
+    no_outline = outliner.images_missing(store, project_id)
     return {
         "holdout": project.get("holdout"),
         "images": {

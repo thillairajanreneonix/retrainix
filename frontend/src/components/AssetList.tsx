@@ -109,7 +109,7 @@ function AssetRow({ asset, job, pollError }: { asset: Asset; job: Job | null; po
               variant={job.status === "running" && total > 0 ? "determinate" : "indeterminate"}
               value={total > 0 ? Math.min(100, (done / total) * 100) : undefined}
               aria-label={`${jobName} for ${asset.filename}`}
-              sx={{ mt: 0.75, height: 8, borderRadius: "4px" }}
+              sx={{ mt: 0.75, height: 8 }}
             />
             {pollError && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>

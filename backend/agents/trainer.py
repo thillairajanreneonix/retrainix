@@ -19,7 +19,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import annotator, dataset_compiler, evaluator, notifier, orchestrator
+from . import annotator, dataset_compiler, evaluator, notifier, orchestrator, outliner
 
 if TYPE_CHECKING:
     from app.worker import JobContext
@@ -143,7 +143,18 @@ def train_job(ctx: JobContext) -> dict[str, Any]:
     if not project.get("holdout"):
         raise ValueError("the hold-out check has not run, so a new model could not be scored honestly")
 
+    outlines: dict[str, Any] | None = None
+    outlines_error: str | None = None
     if compile_first:
+        todo = outliner.images_missing(store, pid)
+        if todo:
+            # Boxes a person drew get a SAM outline before the export. If SAM cannot run,
+            # training still goes ahead: the export writes those boxes as rectangles.
+            _stage(ctx, "outlining")
+            try:
+                outlines = outliner.outline_images(ctx, todo)
+            except Exception as exc:
+                outlines_error = f"{type(exc).__name__}: {exc}"[:300]
         _stage(ctx, "compiling")
         dataset_version = int(dataset_compiler.compile_job(ctx)["version"])
     else:
@@ -239,6 +250,10 @@ def train_job(ctx: JobContext) -> dict[str, Any]:
         "promotion_note": note,
         "val_split_metrics": trained["val_split_metrics"],
     }
+    if outlines is not None:
+        result["outlines"] = outlines
+    if outlines_error is not None:
+        result["outlines_error"] = outlines_error
     store.update(
         version_path,
         {

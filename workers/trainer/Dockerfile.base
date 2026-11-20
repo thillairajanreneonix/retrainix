@@ -26,8 +26,14 @@ COPY backend/requirements.txt backend/requirements.txt
 # of the pinned list is the same in both images.
 RUN grep -v -i '^opencv-python' backend/requirements.txt > /tmp/requirements.trainer.txt \
     && pip install --extra-index-url https://download.pytorch.org/whl/cpu \
-      -r /tmp/requirements.trainer.txt torch torchvision "rfdetr==1.5.2" "opencv-python-headless<5" onnx \
-    && python -c "import torch, torchvision, rfdetr, onnx, onnxruntime, cv2, google.cloud.firestore; \
+      -r /tmp/requirements.trainer.txt torch torchvision "rfdetr==1.5.2" "ultralytics==8.4.128" \
+      "opencv-python-headless<5" "opencv-python<5" onnx \
+    && python -c "import torch, torchvision, rfdetr, ultralytics, onnx, onnxruntime, cv2, google.cloud.firestore; \
 from importlib.metadata import version; \
-print('torch', torch.__version__, 'cuda', torch.cuda.is_available(), '| rfdetr', version('rfdetr'), '| cv2', cv2.__version__, '| onnx', onnx.__version__)"
-ENV MPLCONFIGDIR=/tmp/matplotlib
+print('torch', torch.__version__, 'cuda', torch.cuda.is_available(), '| rfdetr', version('rfdetr'), '| ultralytics', ultralytics.__version__, '| cv2', cv2.__version__, '| onnx', onnx.__version__)"
+# ultralytics is here for ONE thing: it is the loader for MobileSAM, the annotation aid that
+# outlines boxes a person draws (agents/outliner.py). No YOLO model is used anywhere. It pulls
+# the non-headless OpenCV, so that one is pinned below 5 as well (left alone it installs 5.x
+# over the 4.x that rfdetr needs - seen on the build PC, 20 Nov 2026).
+ENV MPLCONFIGDIR=/tmp/matplotlib \
+    YOLO_CONFIG_DIR=/tmp/ultralytics

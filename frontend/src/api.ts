@@ -50,6 +50,36 @@ export type Project = {
   updated_at: string;
 };
 
+// GET /api/gemini/status: one tiny real call, remembered by the API for two minutes.
+export type GeminiStatus = {
+  ok: boolean;
+  route: string | null; // "vertex" or "api_key"
+  model: string | null;
+  error: string | null;
+  checked_at: string;
+  models_available?: string[];
+};
+
+// POST /api/projects/{pid}/predict: the project's active model labels one still frame.
+// Nothing is stored. Coordinates are pixels of the image that was sent.
+export type PredictObject = {
+  id?: string;
+  class: string;
+  bbox_xyxy: [number, number, number, number];
+  polygon_xy: [number, number][] | null;
+  score: number | null;
+  model_class?: string;
+};
+
+export type PredictResult = {
+  width: number;
+  height: number;
+  label_model: LabelModel | null;
+  objects: PredictObject[];
+  unmapped_objects: number;
+  seconds: number;
+};
+
 export type NewProject = {
   name: string;
   classes: string[];
@@ -120,6 +150,7 @@ export type JobType =
   | "qa"
   | "compile"
   | "train"
+  | "outline"
   | "evaluate";
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -130,7 +161,7 @@ export type Job = {
   type: JobType;
   status: JobStatus;
   dry_run: boolean;
-  trigger: "user" | "schedule";
+  trigger: "user" | "schedule" | "auto"; // "auto": started by the API itself, e.g. pre-labelling after an upload
   params: Record<string, unknown>;
   progress: { done: number; total: number };
   result: Record<string, unknown>;
@@ -202,6 +233,7 @@ export type LabelObject = {
   round: number;
   class_source?: "gemini"; // the class was changed by the Gemini check
   model_class_before?: string; // the class before that change
+  outline_source?: "sam"; // only on objects whose outline SAM drew
   added_in_round?: number; // the object was added on a retry
 };
 
@@ -341,9 +373,18 @@ export type QaSummary = {
   n_images: number;
   last_qa: QaResult | null;
   gemini_calls: { used: number; cap: number };
-  // Plain counts of boxes with no outline, on frames that are not gold; absent = none.
-  // Nothing draws those outlines: a box-only object is exported as its rectangle.
+  // Boxes with no outline, on frames that are not gold; absent = none. The `outline` job draws
+  // them with SAM; a box left without one is exported as its rectangle.
   outlines?: { frames_missing: number; objects_missing: number };
+};
+
+// `result` of an outline job; also under "outlines" in a train job result that drew some.
+export type OutlineResult = {
+  images: number;
+  objects: number;
+  failed_objects: number;
+  model: string;
+  seconds: number;
 };
 
 // ---------- Dataset, training, model versions and the schedule (docs/api.md, last section) ----------
@@ -397,7 +438,7 @@ export type TrainEstimate = {
   max_minutes: number;
 };
 
-export type TrainStage = "compiling" | "training" | "exporting" | "evaluating";
+export type TrainStage = "outlining" | "compiling" | "training" | "exporting" | "evaluating";
 
 // `result` of a succeeded train job (the new ModelVersion's main fields).
 export type TrainResult = {
@@ -410,6 +451,8 @@ export type TrainResult = {
   previous: { version: number; map50: number } | null;
   promoted: boolean;
   promotion_note: string;
+  outlines?: OutlineResult; // when the run drew missing outlines before the export
+  outlines_error?: string; // when SAM failed there; those boxes were then exported as rectangles
 };
 
 export type WeightsFormat = "pt" | "onnx";
@@ -506,6 +549,42 @@ const enc = encodeURIComponent;
 export const api = {
   health: () => request<Health>("GET", "/api/health"),
   config: () => request<PublicConfig>("GET", "/api/config"),
+  geminiStatus: () => request<GeminiStatus>("GET", "/api/gemini/status"),
+  /**
+   * One camera frame to the model. 429 while the model is still busy with an earlier frame.
+   * `signal` ends the wait (a time limit, or labelling switched off); that is reported as a
+   * timeout with status 0, like a lost connection.
+   */
+  predictFrame: async (pid: string, jpeg: Blob, signal?: AbortSignal): Promise<PredictResult> => {
+    let res: Response;
+    let text: string;
+    try {
+      res = await fetch(`/api/projects/${enc(pid)}/predict`, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "image/jpeg" },
+        body: jpeg,
+        signal,
+      });
+      text = await res.text();
+    } catch {
+      if (signal?.aborted) throw new ApiError("The model did not answer in time.", "timeout", 0);
+      throw new ApiError("The API could not be reached. Check the connection and try again.", "network", 0);
+    }
+    let parsed: unknown = undefined;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = undefined;
+    }
+    if (!res.ok) throw errorFromBody(parsed, res.status);
+    if (parsed === undefined) throw new ApiError("The API answered with something that is not JSON.", "bad_response", res.status);
+    // The answer is drawn over the live picture, so its shape is checked here rather than trusted.
+    const r = parsed as Partial<PredictResult> | null;
+    if (!r || typeof r !== "object" || !Array.isArray(r.objects) || !(Number(r.width) > 0) || !(Number(r.height) > 0)) {
+      throw new ApiError("The API answered without a labelled frame.", "bad_response", res.status);
+    }
+    return parsed as PredictResult;
+  },
 
   listModels: async () => (await request<{ models: ModelRecord[] }>("GET", "/api/models")).models,
 

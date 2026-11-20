@@ -90,8 +90,8 @@ def assign_splits(images: list[dict[str, Any]], ratios: dict[str, float]) -> dic
 def coco_annotations(label: dict[str, Any], classes: list[str], size: int) -> list[dict[str, Any]]:
     """One COCO annotation per object, in pixels of the squashed size x size image.
 
-    An object with no outline (a box a person drew) is written as its box: nothing draws
-    outlines for those any more, so the model is taught a rectangle for that object. The
+    An object with no outline (a box a person drew that SAM has not outlined yet) is written
+    as its box, so the model is taught a rectangle for that object. The
     bbox and area are computed from the outline itself, so they cannot disagree with it.
     category_id is 1-based, in the project's class order."""
     sx, sy = size / float(label["width"]), size / float(label["height"])

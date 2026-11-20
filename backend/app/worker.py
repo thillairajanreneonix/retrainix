@@ -20,6 +20,7 @@ from agents import (
     dataset_compiler,
     evaluator,
     notifier,
+    outliner,
     teacher_qa,
     trainer,
 )
@@ -55,6 +56,7 @@ HANDLERS: dict[str, Callable[[JobContext], dict[str, Any]]] = {
     "qa": teacher_qa.qa_job,
     "compile": dataset_compiler.compile_job,
     "train": trainer.train_job,
+    "outline": outliner.outline_job,
 }
 
 # agents.yaml orchestrator rule: on agent error retry once, then fail. Only for jobs that are
@@ -62,6 +64,29 @@ HANDLERS: dict[str, Callable[[JobContext], dict[str, Any]]] = {
 # leaves duplicates behind: the first cloud training failure (20 Nov) produced two failed model
 # versions and two identical dataset versions because it was retried.
 RETRY_ONCE = {"extract_frames", "prelabel", "holdout_check"}
+
+
+def auto_prelabel_enabled(config: dict[str, Any]) -> bool:
+    """agents.yaml annotator_model.auto_after_upload. A function so tests can switch it."""
+    return bool(config["agents"]["annotator_model"].get("auto_after_upload"))
+
+
+def label_new_frames(ctx: JobContext, result: dict[str, Any]) -> None:
+    """Every upload goes to the model: when frames have been cut from a video, start
+    pre-labelling them without waiting for a button. Skipped when a pre-label job is already
+    queued or running (the button on the QA screen labels whatever is left). A failure here
+    must not fail the upload, so it is only logged."""
+    try:
+        if not auto_prelabel_enabled(ctx.config) or not result.get("frames_kept"):
+            return
+        from . import jobs  # noqa: PLC0415 - jobs imports this module
+
+        if jobs.active(ctx.store, ctx.project_id, "prelabel"):
+            return
+        job = jobs.create_job(ctx.store, ctx.project_id, "prelabel", {}, trigger="auto")
+        jobs.dispatch(ctx.store, ctx.project_id, job["id"])
+    except Exception:
+        logger.exception("could not start pre-labelling after the upload in %s", ctx.project_id)
 
 
 def run_job(project_id: str, job_id: str) -> dict[str, Any]:
@@ -87,6 +112,8 @@ def run_job(project_id: str, job_id: str) -> dict[str, Any]:
             store.update(
                 path, {"status": "succeeded", "result": result, "finished_at": now_iso()}
             )
+            if job["type"] == "extract_frames":
+                label_new_frames(ctx, result)
             return store.get(path)
         except NotImplementedError as exc:
             error = str(exc)

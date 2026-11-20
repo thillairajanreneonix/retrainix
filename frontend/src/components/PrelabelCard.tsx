@@ -151,7 +151,9 @@ export default function PrelabelCard({ project, onChanged }: { project: Project;
               ? "This project has no frames yet."
               : unlabelled === 0
                 ? `${frames === 1 ? "The 1 frame has" : `All ${formatCount(frames)} frames have`} a label.`
-                : `${plural(unlabelled, "frame has", "frames have")} no label yet, out of ${formatCount(frames)}.`}
+                : `${plural(unlabelled, "frame has", "frames have")} no label yet, out of ${formatCount(frames)}.`}{" "}
+            Labelling starts by itself when a video's frames are ready; the button labels any frames that are still
+            without a label.
           </Typography>
         </Box>
 
@@ -196,6 +198,7 @@ export default function PrelabelCard({ project, onChanged }: { project: Project;
           {job && active && (
             <Box role="group" aria-label="Pre-labelling progress">
               <Typography variant="body2">
+                {job.trigger === "auto" ? "Started by itself after the upload. " : ""}
                 {job.status === "queued"
                   ? "Pre-labelling: waiting to start"
                   : total > 0
@@ -206,7 +209,7 @@ export default function PrelabelCard({ project, onChanged }: { project: Project;
                 variant={job.status === "running" && total > 0 ? "determinate" : "indeterminate"}
                 value={total > 0 ? Math.min(100, (done / total) * 100) : undefined}
                 aria-label="Pre-labelling progress"
-                sx={{ mt: 0.75, height: 8, borderRadius: "4px" }}
+                sx={{ mt: 0.75, height: 8 }}
               />
               {pollError && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>

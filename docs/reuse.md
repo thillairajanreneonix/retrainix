@@ -29,10 +29,10 @@ drawn by a person.
 
 ## Changed by plan.md Amendment A2 (20 Nov 2026, late evening)
 
-No longer used by the product, and to be deleted from the bucket at the next deploy:
-`seed/ultralytics_yolo/yolov8s-seg_sammix_best.pt`, its `.onnx` export, and
-`seed/sam/mobile_sam.pt`. `backend/agents/outliner.py` is deleted. The rows above are kept
-so the record of what was brought across stays complete.
+No longer used by the product: `seed/ultralytics_yolo/yolov8s-seg_sammix_best.pt` and its
+`.onnx` export. **`seed/sam/mobile_sam.pt` and `backend/agents/outliner.py` are still used** -
+the SAM outline step was removed with YOLO and put back the same night at the team lead's
+word. The rows above are kept so the record of what was brought across stays complete.
 
 Added:
 
@@ -42,3 +42,9 @@ Added:
 
 Method reused, not a file: the COCO layout and the batch 2 x 4 accumulation setting come
 from the dashboard's CircularNet runs (HANDOFF.md sections 4.3-4.5, `tools/yolo_seg_to_coco.py`).
+
+Brought across for the redesigned screens (20 Nov, late, by the second session):
+
+| In this project | From the dashboard project | Notes |
+|---|---|---|
+| `frontend/src/assets/reneonix-wordmark-green.png` | `src/ui/assets/icon-green.png` | The Reneonix wordmark, resized to 360 x 120 (23 KB). The dark green palette in `frontend/src/theme.ts` is taken from the same app's look |

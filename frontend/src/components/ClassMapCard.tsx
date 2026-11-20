@@ -21,6 +21,7 @@ import type { Load } from "../hooks";
 import { licenceText } from "./ModelCard";
 import { ErrorRow, LoadingRow } from "./States";
 import { StepTitle } from "./Step";
+import { rx } from "../theme";
 
 const IGNORED = ""; // select value for "this model class is dropped"
 
@@ -38,11 +39,14 @@ export default function ClassMapCard({
   models,
   onRetryModels,
   onSaved,
+  step,
 }: {
   project: Project;
   models: Load<ModelRecord[]>;
   onRetryModels: () => void;
   onSaved: () => void;
+  /** Its number on Annotation QA; left out on Project setup, where it is not one of a row of steps. */
+  step?: number;
 }) {
   const [open, setOpen] = useState(false);
   const locked = (project.counts?.predicted ?? 0) > 0;
@@ -95,7 +99,8 @@ export default function ClassMapCard({
 
             {mapped.length === 0 && (
               <Alert severity="warning">
-                No model class is mapped, so pre-labelling would keep no objects. Review the mapping first.
+                No model class is mapped, so labelling would keep no objects. Review the mapping before you add a
+                video.
               </Alert>
             )}
 
@@ -114,7 +119,8 @@ export default function ClassMapCard({
 
             {project.class_map_source === "name_match" && !locked && (
               <Alert severity="info">
-                This mapping was filled in automatically by matching class names. Check it before pre-labelling.
+                This mapping was filled in automatically by matching class names. Check it before you add the first
+                video: frames are labelled as soon as they are ready, and the mapping cannot be changed after that.
               </Alert>
             )}
           </>
@@ -122,7 +128,7 @@ export default function ClassMapCard({
 
         {locked && (
           <Typography id="class-map-locked" color="text.secondary">
-            Frames are already labelled with this mapping.
+            Frames are already labelled with this mapping, so it can no longer be changed.
           </Typography>
         )}
 
@@ -155,9 +161,15 @@ export default function ClassMapCard({
     <Card component="section" aria-labelledby="class-map-title">
       <CardContent sx={{ display: "grid", gap: 1.5, p: { xs: 2, sm: 3 } }}>
         <Box>
-          <StepTitle n={1} id="class-map-title">
-            Class mapping
-          </StepTitle>
+          {step !== undefined ? (
+            <StepTitle n={step} id="class-map-title">
+              Class mapping
+            </StepTitle>
+          ) : (
+            <Typography id="class-map-title" variant="h5" component="h3">
+              Class mapping
+            </Typography>
+          )}
           <Typography color="text.secondary">
             The model has its own class names. Each one either becomes one of your classes or is ignored.
           </Typography>
@@ -273,10 +285,10 @@ function ClassMapDialog({
                       px: 1.5,
                       borderRadius: "12px",
                       border: "1px solid",
-                      borderColor: draft[mc] === IGNORED ? "rgba(0,0,0,0.3)" : "primary.main",
+                      borderColor: draft[mc] === IGNORED ? rx.borderStrong : rx.accentInk,
                       bgcolor: "background.paper",
                       color: draft[mc] === IGNORED ? "text.secondary" : "text.primary",
-                      "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 1 },
+                      "&:focus-visible": { outline: "2px solid", outlineColor: "primary.dark", outlineOffset: 1 },
                     }}
                   >
                     <option value={IGNORED}>Ignored</option>

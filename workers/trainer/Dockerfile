@@ -12,8 +12,10 @@ WORKDIR /srv
 ENV HOME=/srv/home \
     MPLCONFIGDIR=/srv/home/matplotlib \
     HF_HOME=/srv/home/huggingface \
-    TORCH_HOME=/srv/home/torch
-RUN mkdir -p "$MPLCONFIGDIR" "$HF_HOME" "$TORCH_HOME" && chmod -R a+rwX /srv/home
+    TORCH_HOME=/srv/home/torch \
+    YOLO_CONFIG_DIR=/srv/home/ultralytics
+RUN rm -rf /tmp/Ultralytics /tmp/ultralytics /tmp/matplotlib \
+    && mkdir -p "$MPLCONFIGDIR" "$HF_HOME" "$TORCH_HOME" "$YOLO_CONFIG_DIR" && chmod -R a+rwX /srv/home
 
 COPY backend/app backend/app
 COPY backend/agents backend/agents
@@ -26,5 +28,6 @@ RUN python -c "from app import worker; from agents import trainer; print('traine
 USER nobody
 # Prove, as the user the job runs as, that the training library starts and the home folder is
 # writable. Building the model itself is not tried here: it needs a checkpoint from the bucket.
-RUN python -c "import rfdetr, pathlib, os; p = pathlib.Path(os.environ['HOME']) / 'write-test'; p.write_text('ok'); p.unlink(); print('rfdetr has', [n for n in dir(rfdetr) if n.startswith('RFDETRSeg')], 'and starts as an unprivileged user')"
+RUN python -c "import rfdetr, pathlib, os; p = pathlib.Path(os.environ['HOME']) / 'write-test'; p.write_text('ok'); p.unlink(); print('rfdetr has', [n for n in dir(rfdetr) if n.startswith('RFDETRSeg')], 'and starts as an unprivileged user')" \
+    && python -c "from ultralytics import SAM; import pathlib, os; p = pathlib.Path(os.environ['YOLO_CONFIG_DIR']) / 'write-test'; p.write_text('ok'); p.unlink(); print('the SAM loader starts as an unprivileged user')"
 CMD ["python", "-m", "app.worker"]

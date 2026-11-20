@@ -9,6 +9,7 @@ import DatasetsCard from "../components/DatasetsCard";
 import ModelVersionsTable from "../components/ModelVersionsTable";
 import ScheduleCard from "../components/ScheduleCard";
 import { EmptyState, ErrorRow, LoadingRow } from "../components/States";
+import { PageHeader, StatusBadge } from "../components/ui";
 import TrainCard from "../components/TrainCard";
 import TrendChart from "../components/TrendChart";
 
@@ -36,7 +37,7 @@ export default function TrainPage({ pid }: { pid: string }) {
       <Stack spacing={2}>
         <ErrorRow what="This project could not be loaded" message={project.message} onRetry={reloadProject} />
         <Box>
-          <Button component={RouterLink} to="/" startIcon={<ArrowBackIcon />}>
+          <Button component={RouterLink} to="/projects" startIcon={<ArrowBackIcon />}>
             All projects
           </Button>
         </Box>
@@ -51,24 +52,42 @@ export default function TrainPage({ pid }: { pid: string }) {
   const qaLink = `/projects/${encodeURIComponent(pid)}/qa`;
 
   return (
-    <Stack spacing={3}>
-      <Box component="header">
-        <Typography variant="overline" color="text.secondary">
-          Train &amp; export
-        </Typography>
-        <Typography variant="h4" component="h2" sx={{ overflowWrap: "anywhere" }}>
-          {p.name}
-        </Typography>
-        <Typography color="text.secondary">
-          Train a new model version from the checked frames, see how each version scores on the same gold hold-out,
-          and download the weights.
-        </Typography>
-      </Box>
+    <Stack spacing={{ xs: 2, md: 3 }}>
+      <PageHeader
+        eyebrow="Train & export"
+        title={p.name}
+        subtitle="Train a new model version from the checked frames, see how each version scores on the same gold hold-out, and download the weights."
+        back={{ to: qaLink, label: "Annotation QA" }}
+      >
+        <Box sx={{ mt: 0.5 }}>
+          {/* The version that labels frames right now. This app tracks no separate "deployed" status. */}
+          <StatusBadge tone={activeVersion === null ? "neutral" : "accent"}>
+            {activeVersion === null
+              ? "No model version has been scored yet"
+              : activeVersion === 0
+                ? "Labelling now: the starting weights (version 0)"
+                : `Labelling now: version ${activeVersion}`}
+          </StatusBadge>
+        </Box>
+      </PageHeader>
 
+      <Box
+        sx={{
+          display: "grid",
+          gap: { xs: 2, md: 3 },
+          gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 7fr) minmax(0, 5fr)" },
+          alignItems: "start",
+          "& > *": { minWidth: 0 },
+        }}
+      >
       <Card component="section" aria-labelledby="trend-title">
         <CardContent sx={{ display: "grid", gap: 1.5, p: { xs: 2, sm: 3 } }}>
           <Typography id="trend-title" variant="h5" component="h3">
-            Accuracy by model version
+            Score by model version
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Each version is scored on the same gold hold-out frames. Pick the measure to plot; its name is on the
+            button.
           </Typography>
           {versions.status === "loading" && <LoadingRow label="Loading model versions…" />}
           {versions.status === "error" && (
@@ -92,6 +111,9 @@ export default function TrainPage({ pid }: { pid: string }) {
         </CardContent>
       </Card>
 
+        <TrainCard project={p} onChanged={onChanged} />
+      </Box>
+
       {versions.status === "ready" && list.length > 0 && (
         <Box component="section" aria-labelledby="versions-title">
           <Typography id="versions-title" variant="h5" component="h3" sx={{ mb: 1.5 }}>
@@ -101,9 +123,18 @@ export default function TrainPage({ pid }: { pid: string }) {
         </Box>
       )}
 
-      <TrainCard project={p} onChanged={onChanged} />
-      <DatasetsCard project={p} datasets={datasets} onRetry={reloadDatasets} onChanged={onChanged} />
-      <ScheduleCard project={p} config={config} onSaved={reloadProject} />
+      <Box
+        sx={{
+          display: "grid",
+          gap: { xs: 2, md: 3 },
+          gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 7fr) minmax(0, 5fr)" },
+          alignItems: "start",
+          "& > *": { minWidth: 0 },
+        }}
+      >
+        <DatasetsCard project={p} datasets={datasets} onRetry={reloadDatasets} onChanged={onChanged} />
+        <ScheduleCard project={p} config={config} onSaved={reloadProject} />
+      </Box>
     </Stack>
   );
 }

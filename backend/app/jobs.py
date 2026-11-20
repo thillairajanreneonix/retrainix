@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # What a user may start through POST /jobs (docs/api.md). extract_frames and import_gold
 # are started by completing an upload; evaluate always follows train.
-USER_JOB_TYPES = {"prelabel", "holdout_check", "qa", "compile", "train"}
+USER_JOB_TYPES = {"prelabel", "holdout_check", "qa", "compile", "train", "outline"}
 ALL_JOB_TYPES = USER_JOB_TYPES | {"extract_frames", "import_gold", "evaluate"}
 
 
@@ -53,6 +53,15 @@ def create_job(
     }
     store.set(f"projects/{project_id}/jobs/{job_id}", job)
     return {**job, "id": job_id}
+
+
+def active(store: Store, project_id: str, job_type: str) -> bool:
+    """Is a real (not dry-run) job of this type queued or running for the project?"""
+    for status in ("queued", "running"):
+        waiting = store.list(f"projects/{project_id}/jobs", where={"status": status})
+        if any(j["type"] == job_type and not j["dry_run"] for j in waiting):
+            return True
+    return False
 
 
 def dispatch(store: Store, project_id: str, job_id: str) -> None:
@@ -92,8 +101,8 @@ def _run_cloud_run_job(project_id: str, job_id: str, job_type: str) -> str:
 
     s = get_settings()
     credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-    # Training needs the framework that only the trainer image carries.
-    job_name = s.trainer_job_name if job_type == "train" else s.worker_job_name
+    # Training and SAM outlines need the framework that only the trainer image carries.
+    job_name = s.trainer_job_name if job_type in ("train", "outline") else s.worker_job_name
     name = f"projects/{s.gcp_project_id}/locations/{s.gcp_region}/jobs/{job_name}"
     response = AuthorizedSession(credentials).post(
         f"https://run.googleapis.com/v2/{name}:run",

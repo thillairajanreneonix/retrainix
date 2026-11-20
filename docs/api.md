@@ -432,7 +432,7 @@ The export is COCO segmentation, in the layout CircularNet's training library re
 holding its images and one `_annotations.coco.json`. Images are squashed to the model's
 432 x 432 input and outlines are scaled with them. Category ids are 1-based, in the
 project's class order. An object with a box and no outline is written as its rectangle:
-nothing draws outlines for hand-drawn boxes since MobileSAM was removed (20 Nov 2026).
+the `outline` job (below) is what gives hand-drawn boxes a real outline.
 
 **`train`** params: `compile_first` (default `true`: export a fresh dataset version, then train
 on it), `dataset_version` (train on this existing version instead), `epochs` (default from
@@ -446,7 +446,7 @@ running; or there is nothing to train on.
  "compute": "Cloud Run job, 8 vCPU, CPU only", "max_minutes": 120}
 
 // while running: job.progress is {"done": <epochs finished>, "total": <epochs>} and
-// job.result carries {"stage": "compiling" | "training" | "exporting" | "evaluating"}
+// job.result carries {"stage": "outlining" | "compiling" | "training" | "exporting" | "evaluating"}
 
 // train job result  ==  the new ModelVersion's main fields
 {
@@ -490,18 +490,79 @@ dataset version; and no `train` job is queued or running. Otherwise the project 
 under `skipped` with the reason. Project gains `schedule_set_at`, `last_retrain_at`,
 `last_tick` (`{"at", "decision", "reason"}`) so the UI can show why nothing ran.
 
-## Objects without an outline
+## SAM outlines (added 20 Nov 2026 at the team lead's request)
 
-A box a person draws in review has no outline. Until the evening of 20 Nov 2026 an `outline`
-job drew one with MobileSAM; that model is not Google's and was removed with Ultralytics
-YOLO, so the job type no longer exists (`422`). What remains are counts, so the screens can
-say how many objects will be exported as rectangles:
+A box a person draws in review has no outline. The `outline` job draws one with MobileSAM,
+prompted by the box. It runs on CPU in the trainer image (measured 20 Nov on a laptop CPU:
+about 3 s for a frame with 40 boxes, 0.8 s for one box).
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/projects/{pid}/jobs` | `{"type": "outline", "dry_run": false, "params": {}}` | `202` Job |
+
+- It covers every object that has a box and no outline, on every frame that is not gold.
+  Optional param `image_ids` limits it to those frames.
+- Refused with `409` when no object lacks an outline, or an `outline` job is queued or running.
+- Each frame it touches gets a new label round. The frame's status does not change.
+- An object it outlines gains `"outline_source": "sam"`. Its class, box, score and `source`
+  are untouched: SAM draws the shape, it never decides what the object is.
+- If SAM returns nothing usable for a box, the object keeps `polygon_xy: null` and is counted
+  in `failed_objects`; the export then writes its four corners, as before.
+- **Gold frames are never outlined after the freeze** (they are read-only). To give gold
+  frames outlines, run `outline` before freezing; `GoldStatus.boxes_without_outline` says how
+  many boxes in the reviewed frames still lack one.
+- A `train` job with `compile_first` draws missing outlines itself before it exports, as stage
+  `"outlining"`. If SAM fails there, training goes on with rectangles and the train result
+  carries `outlines_error`.
 
 ```jsonc
+// dry run:  result.estimate
+{"images": 4, "objects": 9, "gemini_calls": 0, "gpu_minutes": 0}
+
+// outline job result  (also under "outlines" in a train job result that drew some)
+{"images": 4, "objects": 9, "failed_objects": 0, "model": "mobile_sam", "seconds": 14.2}
+
+// additions to existing shapes
 Image:      "missing_outlines": 2            // objects in the latest label with no outline
 QaSummary:  "outlines": {"frames_missing": 4, "objects_missing": 9}   // frames that are not gold
 GoldStatus: "boxes_without_outline": 3       // in the reviewed frames, before the freeze; 0 after
+LabelObject: "outline_source": "sam"         // only on objects SAM outlined
 ```
+
+## Everything that comes in goes to the model (added 21 Nov 2026 at the team lead's request)
+
+**Uploads and recordings.** When an `extract_frames` job succeeds with at least one frame, a
+`prelabel` job starts by itself, with `"trigger": "auto"` (`config/agents.yaml`
+`annotator_model.auto_after_upload`). It is skipped when a `prelabel` job is already queued
+or running; the QA screen's button labels whatever is left. If the automatic start fails,
+the upload still succeeds. Because the class map is locked once frames are labelled, it
+has to be right when the project is created.
+
+### Labelling a live view
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/projects/{pid}/predict` | the raw JPEG or PNG bytes, at most `annotator_model.live_max_image_mb` (2 MB) | the labels for that picture |
+
+```jsonc
+{
+  "width": 1280, "height": 720,                        // of the picture that was sent
+  "label_model": {"recipe": "circularnet_rfdetr", "version": 0, "profile": "default"},
+  "objects": [{"id": "o1", "class": "plastic", "bbox_xyxy": [x0, y0, x1, y1],
+               "polygon_xy": [[x, y], ...] /* or null */, "score": 0.82, "model_class": "Plastics-PP"}],
+  "unmapped_objects": 3,                                // found, but their class maps to no project class
+  "seconds": 0.9
+}
+```
+
+- The project's active model labels it: Google's CircularNet through the class map until a
+  version is promoted, then the project's own version.
+- **Nothing is stored** - no image, no label, no job, no counter.
+- One picture at a time per instance: `429 busy` while the previous one is being labelled;
+  the caller skips that frame. `413 too_large`, `422` when the body is not a picture.
+- It runs inside the web service on CPU. The first call after a cold start also fetches and
+  opens the model. So this is a frame every few seconds, not real-time video, and the
+  screen has to say so.
 
 ## Recording from a camera (added 20 Nov 2026 at the team lead's request)
 

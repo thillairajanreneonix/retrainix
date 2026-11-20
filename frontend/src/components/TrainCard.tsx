@@ -24,6 +24,7 @@ import { JobEnded, WaitingNote } from "./Step";
 const TRAIN_PARAMS = { compile_first: true };
 
 const STAGE_WORDS: Record<string, string> = {
+  outlining: "Drawing missing outlines",
   compiling: "Compiling the dataset",
   training: "Training",
   exporting: "Exporting the weights",
@@ -66,7 +67,7 @@ function TrainProgress({ job, pollError }: { job: Job; pollError: string | null 
         variant={determinate ? "determinate" : "indeterminate"}
         value={determinate ? Math.min(100, (done / total) * 100) : undefined}
         aria-label="Training progress"
-        sx={{ mt: 0.75, height: 8, borderRadius: "4px" }}
+        sx={{ mt: 0.75, height: 8 }}
       />
       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
         Training runs on CPU on Cloud Run. You can leave this page; the run carries on.
@@ -92,6 +93,9 @@ function TrainOutcome({ result }: { result: Record<string, unknown> }) {
   const note = typeof result.promotion_note === "string" && result.promotion_note ? result.promotion_note : null;
   const minutes = readNumber(result, "train_minutes");
   const epochs = readNumber(result, "epochs_run");
+  const outlinesDrawn = readNumber(result.outlines, "objects");
+  const outlinesFailed = readNumber(result.outlines, "failed_objects");
+  const outlinesError = typeof result.outlines_error === "string" && result.outlines_error ? result.outlines_error : null;
 
   if (version === null) {
     return <Alert severity="warning">The last training run finished but did not report a version.</Alert>;
@@ -103,6 +107,7 @@ function TrainOutcome({ result }: { result: Record<string, unknown> }) {
       : "";
 
   return (
+    <Box sx={{ display: "grid", gap: 1 }}>
     <Alert severity={promoted === false ? "warning" : "success"} sx={{ overflowWrap: "anywhere" }}>
       <Box>
         {map50 !== null
@@ -128,7 +133,21 @@ function TrainOutcome({ result }: { result: Record<string, unknown> }) {
           .
         </Box>
       )}
+      {outlinesDrawn !== null && (
+        <Box sx={{ mt: 0.5 }}>
+          {plural(outlinesDrawn, "outline", "outlines")} drawn with SAM before the export.
+          {outlinesFailed !== null && outlinesFailed > 0
+            ? ` ${plural(outlinesFailed, "box", "boxes")} could not be outlined and ${outlinesFailed === 1 ? "was" : "were"} exported as ${outlinesFailed === 1 ? "a rectangle" : "rectangles"}.`
+            : ""}
+        </Box>
+      )}
     </Alert>
+    {outlinesError && (
+      <Alert severity="warning" sx={{ overflowWrap: "anywhere" }}>
+        Outlines could not be drawn ({outlinesError}); boxes without an outline were exported as rectangles.
+      </Alert>
+    )}
+    </Box>
   );
 }
 

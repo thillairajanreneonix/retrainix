@@ -37,6 +37,7 @@ import {
 import { formatCount, formatTimestamp, plural } from "../format";
 import { useLoad } from "../hooks";
 import { ErrorRow, LoadingRow } from "./States";
+import { rx } from "../theme";
 
 const DETAIL_WIDTH = 1280;
 const MIN_BOX = 4; // image pixels, each side
@@ -46,7 +47,7 @@ const MIN_BOX = 4; // image pixels, each side
 const CLASS_COLOURS = ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#DDDDDD"];
 const UNKNOWN_COLOUR = "#FFFFFF"; // a class that is not in project.classes
 
-function colourFor(classes: string[], name: string): string {
+export function colourFor(classes: string[], name: string): string {
   const i = classes.indexOf(name);
   return i >= 0 ? CLASS_COLOURS[i % CLASS_COLOURS.length] : UNKNOWN_COLOUR;
 }
@@ -64,6 +65,7 @@ type Draft = {
   source: LabelSource;
   classSource?: "gemini";
   classBefore?: string;
+  outlineSource?: "sam";
 };
 
 function draftsFrom(label: MasterLabel): Draft[] {
@@ -77,6 +79,7 @@ function draftsFrom(label: MasterLabel): Draft[] {
     source: o.source,
     classSource: o.class_source,
     classBefore: o.model_class_before,
+    outlineSource: o.outline_source,
   }));
 }
 
@@ -113,7 +116,7 @@ const selectSx = {
   border: "1px solid rgba(0,0,0,0.3)",
   bgcolor: "background.paper",
   color: "text.primary",
-  "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 1 },
+  "&:focus-visible": { outline: "2px solid", outlineColor: "primary.dark", outlineOffset: 1 },
 } as const;
 
 function Shape({
@@ -459,7 +462,7 @@ export default function FrameReviewDialog({
                 maxWidth: { md: `calc((100vh - 230px) * ${width / height})` },
                 mx: "auto",
                 aspectRatio: `${width} / ${height}`,
-                bgcolor: "#16181a",
+                bgcolor: rx.annotationSurface,
                 borderRadius: "12px",
                 overflow: "hidden",
                 lineHeight: 0,
@@ -733,8 +736,8 @@ export default function FrameReviewDialog({
                             onClick={() => select(d.key, false)}
                             sx={{
                               border: "2px solid",
-                              borderColor: selected ? "primary.main" : "divider",
-                              bgcolor: selected ? "#eef5e8" : "background.paper",
+                              borderColor: selected ? rx.accentInk : "divider",
+                              bgcolor: selected ? rx.accentSoft : "background.paper",
                               borderRadius: "12px",
                               px: 0.75,
                               py: 0.5,
@@ -755,7 +758,7 @@ export default function FrameReviewDialog({
                                   flexShrink: 0,
                                   font: "inherit",
                                   fontSize: 14,
-                                  "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main" },
+                                  "&:focus-visible": { outline: "2px solid", outlineColor: "primary.dark" },
                                 }}
                               >
                                 <Swatch colour={colourFor(classes, d.class)} />
@@ -802,6 +805,7 @@ export default function FrameReviewDialog({
                               {d.id === null && <Chip size="small" color="primary" label="new" />}
                               {d.id !== null && d.source === "human" && <Chip size="small" variant="outlined" label="person" />}
                               {d.source === "gold" && <Chip size="small" variant="outlined" label="gold" />}
+                              {d.outlineSource === "sam" && <Chip size="small" variant="outlined" label="outline by SAM" />}
                               {d.polygon === null && <Chip size="small" variant="outlined" label="box only" />}
                               {d.classSource === "gemini" && (
                                 <Chip

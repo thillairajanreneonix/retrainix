@@ -1,21 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import { Alert, Box, Button, Card, CardContent, Chip, Link, Stack, Typography } from "@mui/material";
+import { Alert, Box, Button, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { api, type Job, type ModelRecord, type Project } from "../api";
-import { formatDate, humanise } from "../format";
+import { formatCount, formatDate, framesInProject, framesWithLabels, humanise } from "../format";
 import { announceJobFinished, useLoad, type Load } from "../hooks";
 import AddVideoCard from "../components/AddVideoCard";
 import AssetList, { isActive } from "../components/AssetList";
+import AutoLabelCard from "../components/AutoLabelCard";
+import ClassMapCard from "../components/ClassMapCard";
 import FramesSection from "../components/FramesSection";
 import { licenceText } from "../components/ModelCard";
 import { ErrorRow, LoadingRow } from "../components/States";
+import { MetricCard, PageHeader, StatusBadge } from "../components/ui";
 
 const POLL_MS = 2000; // docs/api.md: re-read a job every 2 seconds while queued or running
 
 export default function ProjectSetupPage({ pid }: { pid: string }) {
   const [project, reloadProject] = useLoad(() => api.getProject(pid), [pid]);
-  const [models] = useLoad(() => api.listModels(), []);
+  const [models, reloadModels] = useLoad(() => api.listModels(), []);
   const [assets, reloadAssets] = useLoad(() => api.listAssets(pid), [pid]);
 
   const [jobs, setJobs] = useState<Record<string, Job>>({});
@@ -111,7 +115,7 @@ export default function ProjectSetupPage({ pid }: { pid: string }) {
       <Stack spacing={2}>
         <ErrorRow what="This project could not be loaded" message={project.message} onRetry={reloadProject} />
         <Box>
-          <Button component={RouterLink} to="/" startIcon={<ArrowBackIcon />}>
+          <Button component={RouterLink} to="/projects" startIcon={<ArrowBackIcon />}>
             All projects
           </Button>
         </Box>
@@ -123,8 +127,22 @@ export default function ProjectSetupPage({ pid }: { pid: string }) {
 
   return (
     <Stack spacing={3}>
-      <ProjectHeader project={p} models={models} />
-      <AddVideoCard pid={pid} onJobStarted={onJobStarted} onAssetsChanged={reloadAssets} />
+      <ProjectHeader project={p} />
+
+      {/* Before the upload, not after it: the first labelled frame locks the mapping, and labelling starts by itself. */}
+      <ClassMapCard project={p} models={models} onRetryModels={reloadModels} onSaved={reloadProject} />
+
+      <Box sx={{ display: "grid", gap: { xs: 2, md: 3 }, gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 7fr) minmax(0, 5fr)" }, alignItems: "start" }}>
+        <AddVideoCard pid={pid} onJobStarted={onJobStarted} onAssetsChanged={reloadAssets} />
+        <Stack spacing={{ xs: 2, md: 3 }} sx={{ minWidth: 0 }}>
+          <ProjectDetails project={p} models={models} />
+          <AutoLabelCard project={p} refreshKey={framesKey} onFinished={reloadProject} />
+          <Box sx={{ display: "grid", gap: { xs: 2, md: 3 }, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+            <MetricCard label="Frames kept" value={formatCount(framesInProject(p.counts))} hint="from the videos below" />
+            <MetricCard label="Frames with labels" value={formatCount(framesWithLabels(p.counts))} hint="from the model, so far" />
+          </Box>
+        </Stack>
+      </Box>
 
       <Box component="section" aria-labelledby="videos-title">
         <Typography id="videos-title" variant="h5" component="h3" sx={{ mb: 1.5 }}>
@@ -135,7 +153,7 @@ export default function ProjectSetupPage({ pid }: { pid: string }) {
 
       <FramesSection
         pid={pid}
-        total={p.counts?.frames ?? null}
+        total={p.counts ? framesInProject(p.counts) : null}
         assets={assets.status === "ready" ? assets.data : []}
         refreshKey={framesKey}
       />
@@ -172,50 +190,53 @@ function ModelLine({ role, recipeId, models }: { role: string; recipeId: string;
   );
 }
 
-function ProjectHeader({ project, models }: { project: Project; models: Load<ModelRecord[]> }) {
+function ProjectHeader({ project }: { project: Project }) {
   return (
-    <Box component="header" sx={{ display: "grid", gap: 1.5 }}>
-      <Link
-        component={RouterLink}
-        to="/"
-        underline="hover"
-        sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, minHeight: 44, justifySelf: "start" }}
-      >
-        <ArrowBackIcon fontSize="small" aria-hidden />
-        All projects
-      </Link>
-
-      <Stack direction="row" useFlexGap spacing={1.5} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 1 }}>
-        <Typography variant="h4" component="h2" sx={{ overflowWrap: "anywhere", minWidth: 0 }}>
-          {project.name}
-        </Typography>
-        <Chip label={`State: ${humanise(project.state)}`} />
+    <PageHeader
+      eyebrow="Project setup"
+      title={project.name}
+      subtitle="Check the class mapping, then add footage of the belt. Frames are sampled from each video and labelled by the model by itself; you check them on the next screen."
+      back={{ to: "/projects", label: "All projects" }}
+      actions={
+        <Button variant="contained" component={RouterLink} to={`/projects/${encodeURIComponent(project.id)}/qa`} endIcon={<ArrowForwardIcon />}>
+          Next: Annotation QA
+        </Button>
+      }
+    >
+      <Stack direction="row" useFlexGap spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 1, mt: 0.5 }}>
+        <StatusBadge tone="accent">State: {humanise(project.state)}</StatusBadge>
+        <Box component="ul" aria-label="Classes" sx={{ listStyle: "none", p: 0, m: 0, display: "flex", flexWrap: "wrap", gap: 1 }}>
+          {project.classes.map((c) => (
+            <li key={c}>
+              <Chip variant="outlined" size="small" label={c} sx={{ maxWidth: "100%" }} />
+            </li>
+          ))}
+        </Box>
       </Stack>
+    </PageHeader>
+  );
+}
 
-      <Box component="ul" aria-label="Classes" sx={{ listStyle: "none", p: 0, m: 0, display: "flex", flexWrap: "wrap", gap: 1 }}>
-        {project.classes.map((c) => (
-          <li key={c}>
-            <Chip variant="outlined" label={c} sx={{ maxWidth: "100%" }} />
-          </li>
-        ))}
-      </Box>
-
-      <Card>
-        <CardContent sx={{ display: "grid", gap: 1.5 }}>
-          {project.prelabel_recipe === project.recipe ? (
-            // One model does both jobs, so it is named once.
-            <ModelLine role="Pre-labels and trains" recipeId={project.recipe} models={models} />
-          ) : (
-            <>
-              <ModelLine role="Pre-labels with" recipeId={project.prelabel_recipe} models={models} />
-              <ModelLine role="Trains" recipeId={project.recipe} models={models} />
-            </>
-          )}
-          <Typography variant="body2" color="text.secondary">
-            Created <time dateTime={project.created_at}>{formatDate(project.created_at)}</time>
-          </Typography>
-        </CardContent>
-      </Card>
-    </Box>
+function ProjectDetails({ project, models }: { project: Project; models: Load<ModelRecord[]> }) {
+  return (
+    <Card component="section" aria-labelledby="project-details-title">
+      <CardContent sx={{ display: "grid", gap: 1.5, p: { xs: 2, sm: 3 } }}>
+        <Typography id="project-details-title" variant="h5" component="h3">
+          Model
+        </Typography>
+        {project.prelabel_recipe === project.recipe ? (
+          // One model does both jobs, so it is named once.
+          <ModelLine role="Pre-labels and trains" recipeId={project.recipe} models={models} />
+        ) : (
+          <>
+            <ModelLine role="Pre-labels with" recipeId={project.prelabel_recipe} models={models} />
+            <ModelLine role="Trains" recipeId={project.recipe} models={models} />
+          </>
+        )}
+        <Typography variant="body2" color="text.secondary">
+          Created <time dateTime={project.created_at}>{formatDate(project.created_at)}</time>
+        </Typography>
+      </CardContent>
+    </Card>
   );
 }

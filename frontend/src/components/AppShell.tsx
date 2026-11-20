@@ -1,89 +1,182 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link as RouterLink, Outlet, useLocation, useMatch } from "react-router-dom";
-import {
-  AppBar,
-  Box,
-  Drawer,
-  IconButton,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Toolbar,
-  Typography,
-  useMediaQuery,
-} from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import { Box, Drawer, IconButton, Tooltip, Typography, useMediaQuery } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
+import MenuOpenIcon from "@mui/icons-material/MenuOpen";
+import CloseIcon from "@mui/icons-material/Close";
+import GridViewOutlinedIcon from "@mui/icons-material/GridViewOutlined";
+import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
 import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import ModelTrainingOutlinedIcon from "@mui/icons-material/ModelTrainingOutlined";
+import { api } from "../api";
+import { useLoad } from "../hooks";
+import { rx } from "../theme";
+import wordmark from "../assets/reneonix-wordmark-green.png";
 import NotificationsBell from "./NotificationsBell";
 
-const DRAWER_WIDTH = 280;
+// Below this width the rail is replaced by a menu button and a drawer.
+const DESKTOP_QUERY = "(min-width:761px)";
+const EXPANDED_KEY = "retrainix.nav.expanded";
+const RAIL_ID = "retrainix-rail";
 
 type Destination = {
   label: string;
   icon: ReactNode;
-  to: string | null; // null = not reachable yet
+  to: string | null; // null = needs a project to be open
   active: boolean;
   disabledHint: string;
 };
 
-const pillSx = {
-  borderRadius: 999,
-  minHeight: 56,
-  px: 2,
-  width: "100%",
-  textAlign: "left",
-  color: "text.primary",
-  "&.Mui-selected, &.Mui-selected:hover": { bgcolor: "#d7e8cd", color: "#0f2000" },
-  "&.Mui-selected .MuiListItemIcon-root": { color: "#0f2000" },
-  "&.Mui-disabled": { opacity: 1, color: "text.disabled" },
-  "&.Mui-disabled .MuiListItemIcon-root": { color: "text.disabled" },
-} as const;
+function readExpanded(): boolean {
+  try {
+    return window.localStorage.getItem(EXPANDED_KEY) === "1";
+  } catch {
+    return false; // private window or blocked storage: the rail simply starts collapsed
+  }
+}
 
-function NavList({ destinations, onNavigate }: { destinations: Destination[]; onNavigate: () => void }) {
+function writeExpanded(value: boolean): void {
+  try {
+    window.localStorage.setItem(EXPANDED_KEY, value ? "1" : "0");
+  } catch {
+    /* a remembered preference only; the shell works without it */
+  }
+}
+
+const chromeFocus = { "&:focus-visible": { outline: `3px solid ${rx.accent}`, outlineOffset: 2 } } as const;
+
+/** One destination: a link, or - while no project is open - a focusable entry that says why not. */
+function NavItem({ d, showLabel, onNavigate }: { d: Destination; showLabel: boolean; onNavigate: () => void }) {
+  const base = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: showLabel ? "flex-start" : "center",
+    gap: 1.5,
+    width: showLabel ? "100%" : 48,
+    minHeight: 48,
+    px: showLabel ? 1.5 : 0,
+    borderRadius: "12px",
+    textDecoration: "none",
+    fontWeight: 500,
+    lineHeight: 1.3,
+    ...chromeFocus,
+  } as const;
+
+  const text = showLabel ? (
+    <Box component="span" sx={{ minWidth: 0, display: "grid" }}>
+      <span>{d.label}</span>
+      {!d.to && (
+        <Box component="span" sx={{ fontSize: "0.75rem", fontWeight: 400 }}>
+          {d.disabledHint}
+        </Box>
+      )}
+    </Box>
+  ) : null;
+
+  const item = d.to ? (
+    <Box
+      component={RouterLink}
+      to={d.to}
+      aria-current={d.active ? "page" : undefined}
+      aria-label={showLabel ? undefined : d.label}
+      onClick={onNavigate}
+      sx={{
+        ...base,
+        color: d.active ? rx.accentInk : rx.chromeText,
+        bgcolor: d.active ? rx.accentSoft : "transparent",
+        "&:hover": { bgcolor: d.active ? rx.accentSoft : rx.chromeHover },
+      }}
+    >
+      {d.icon}
+      {text}
+    </Box>
+  ) : (
+    <Box
+      component="span"
+      role="link"
+      aria-disabled="true"
+      aria-label={`${d.label}: ${d.disabledHint}`}
+      tabIndex={0}
+      sx={{ ...base, color: rx.chromeMuted, cursor: "not-allowed" }}
+    >
+      {d.icon}
+      {text}
+    </Box>
+  );
+
+  if (showLabel) return item;
   return (
-    <Box component="nav" aria-label="Main" sx={{ px: 1.5, py: 1 }}>
-      <List disablePadding sx={{ display: "grid", gap: 0.5 }}>
-        {destinations.map((d) => (
-          <ListItem key={d.label} disablePadding>
-            {d.to ? (
-              <ListItemButton
-                component={RouterLink}
-                to={d.to}
-                selected={d.active}
-                aria-current={d.active ? "page" : undefined}
-                onClick={onNavigate}
-                sx={pillSx}
-              >
-                <ListItemIcon sx={{ minWidth: 40 }}>{d.icon}</ListItemIcon>
-                <ListItemText primary={d.label} />
-              </ListItemButton>
-            ) : (
-              <ListItemButton component="button" disabled sx={pillSx}>
-                <ListItemIcon sx={{ minWidth: 40 }}>{d.icon}</ListItemIcon>
-                <ListItemText
-                  primary={d.label}
-                  secondary={d.disabledHint}
-                  slotProps={{ secondary: { sx: { color: "text.secondary" } } }}
-                />
-              </ListItemButton>
-            )}
-          </ListItem>
-        ))}
-      </List>
+    <Tooltip title={d.to ? d.label : `${d.label}: ${d.disabledHint}`} placement="right">
+      {item}
+    </Tooltip>
+  );
+}
+
+function NavList({ destinations, showLabel, onNavigate }: { destinations: Destination[]; showLabel: boolean; onNavigate: () => void }) {
+  return (
+    <Box
+      component="ul"
+      sx={{ listStyle: "none", p: 0, m: 0, display: "grid", gap: 1.5, justifyItems: showLabel ? "stretch" : "center" }}
+    >
+      {destinations.map((d) => (
+        <li key={d.label}>
+          <NavItem d={d} showLabel={showLabel} onNavigate={onNavigate} />
+        </li>
+      ))}
     </Box>
   );
 }
 
-/** Top app bar + navigation drawer (permanent on desktop, hamburger on phone width). */
+function Brand({ onClick }: { onClick?: () => void }) {
+  return (
+    <Box
+      component={RouterLink}
+      to="/"
+      aria-label="Retrainix, dashboard"
+      onClick={onClick}
+      sx={{
+        alignSelf: "stretch",
+        display: "inline-flex",
+        alignItems: "center",
+        px: { xs: 2, sm: 3 },
+        bgcolor: rx.accent,
+        color: rx.onAccent,
+        fontSize: { xs: 22, sm: 24 },
+        fontWeight: 700,
+        letterSpacing: "-0.8px",
+        textDecoration: "none",
+        "&:focus-visible": { outline: `3px solid ${rx.onAccent}`, outlineOffset: -5 },
+      }}
+    >
+      Retrainix
+    </Box>
+  );
+}
+
+/** The Reneonix wordmark and line, at the foot of the menu when its labels are shown. */
+function BrandFooter() {
+  return (
+    <Box sx={{ mt: "auto", pt: 2, px: 1, borderTop: `1px solid ${rx.chromeBorder}`, display: "grid", gap: 1 }}>
+      <Box component="img" src={wordmark} alt="Reneonix" sx={{ width: 132, height: 44, objectFit: "contain", objectPosition: "left center", filter: rx.logoFilter }} />
+      <Typography component="p" sx={{ fontSize: "0.75rem", color: rx.chromeMuted, lineHeight: 1.5 }}>
+        Material Circularity,
+        <br />
+        Powered by Intelligence.
+        <br />© 2026 Reneonix
+      </Typography>
+    </Box>
+  );
+}
+
+/**
+ * The frame every screen sits in: a charcoal top bar, and a navigation rail that expands to
+ * show labels. Under 761 px the rail gives way to a menu button and a drawer.
+ */
 export default function AppShell() {
-  const theme = useTheme();
-  const desktop = useMediaQuery(theme.breakpoints.up("md"));
-  const [open, setOpen] = useState(false);
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+  const [expanded, setExpanded] = useState(readExpanded);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
 
   const projectMatch = useMatch("/projects/:pid/*");
@@ -91,137 +184,177 @@ export default function AppShell() {
   const section = projectMatch?.params["*"] ?? "";
   const base = pid ? `/projects/${encodeURIComponent(pid)}` : null;
 
-  // Close the phone drawer whenever the route changes.
-  useEffect(() => setOpen(false), [location.pathname]);
+  // The open project's real name, for the top bar. Nothing is shown until it has loaded.
+  const [project] = useLoad(() => (pid ? api.getProject(pid) : Promise.resolve(null)), [pid]);
+  const projectName = project.status === "ready" && project.data ? project.data.name : null;
 
+  // Close the drawer whenever the route changes, and whenever the rail takes over.
+  useEffect(() => setDrawerOpen(false), [location.pathname, desktop]);
+
+  const toggleRail = useCallback(() => {
+    setExpanded((was) => {
+      writeExpanded(!was);
+      return !was;
+    });
+  }, []);
+
+  const needProject = "open a project first";
   const destinations: Destination[] = [
     {
-      label: "Project setup",
-      icon: <FolderOpenOutlinedIcon />,
-      to: base ?? "/",
-      active: !pid || section === "",
+      label: "Dashboard",
+      icon: <SpaceDashboardOutlinedIcon />,
+      to: base ? `${base}/dashboard` : "/",
+      active: section === "dashboard" || location.pathname === "/",
       disabledHint: "",
     },
-    {
-      label: "Annotation QA",
-      icon: <FactCheckOutlinedIcon />,
-      to: base ? `${base}/qa` : null,
-      active: section === "qa",
-      disabledHint: "Open a project first",
-    },
-    {
-      label: "Train & export",
-      icon: <ModelTrainingOutlinedIcon />,
-      to: base ? `${base}/train` : null,
-      active: section === "train",
-      disabledHint: "Open a project first",
-    },
+    { label: "Projects", icon: <GridViewOutlinedIcon />, to: "/projects", active: location.pathname === "/projects", disabledHint: "" },
+    { label: "Project setup", icon: <FolderOpenOutlinedIcon />, to: base, active: Boolean(pid) && section === "", disabledHint: needProject },
+    { label: "Annotation QA", icon: <FactCheckOutlinedIcon />, to: base ? `${base}/qa` : null, active: section === "qa", disabledHint: needProject },
+    { label: "Train & export", icon: <ModelTrainingOutlinedIcon />, to: base ? `${base}/train` : null, active: section === "train", disabledHint: needProject },
   ];
 
-  const nav = <NavList destinations={destinations} onNavigate={() => setOpen(false)} />;
+  const railWidth = expanded ? rx.railWidthOpen : rx.railWidth;
+  const menuButtonSx = { color: rx.chromeText, "&:hover": { bgcolor: rx.chromeHover }, "&.Mui-focusVisible": { outline: `3px solid ${rx.accent}`, outlineOffset: 2 } } as const;
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <AppBar
-        position="fixed"
-        elevation={0}
+    <Box sx={{ minHeight: "100dvh", bgcolor: "background.default" }}>
+      <Box
+        component="a"
+        href="#main"
         sx={{
-          bgcolor: "background.default",
-          color: "text.primary",
-          borderBottom: "1px solid",
-          borderColor: "divider",
-          // Above the permanent drawer on desktop; below the phone drawer, which is a modal.
-          zIndex: (t) => (desktop ? t.zIndex.drawer + 1 : t.zIndex.appBar),
+          position: "fixed",
+          top: 8,
+          left: 8,
+          zIndex: 1400,
+          px: 2,
+          py: 1,
+          borderRadius: "10px",
+          bgcolor: rx.surface,
+          color: rx.text,
+          fontWeight: 600,
+          transform: "translateY(-200%)",
+          "&:focus": { transform: "none" },
         }}
       >
-        <Toolbar sx={{ gap: 1 }}>
-          {!desktop && (
-            <IconButton
-              edge="start"
-              size="large"
-              aria-label="Open navigation"
-              aria-expanded={open}
-              onClick={() => setOpen(true)}
-            >
+        Skip to the page
+      </Box>
+
+      <Box
+        component="header"
+        sx={{
+          position: "fixed",
+          inset: "0 0 auto 0",
+          zIndex: (t) => t.zIndex.appBar,
+          height: rx.headerHeight,
+          display: "flex",
+          alignItems: "center",
+          bgcolor: rx.chrome,
+          color: rx.chromeText,
+          borderBottom: `1px solid ${rx.chromeBorder}`,
+          pr: { xs: 1.5, sm: 3 },
+        }}
+      >
+        <Box sx={{ width: { xs: 56, sm: rx.railWidth }, flexShrink: 0, display: "grid", placeItems: "center" }}>
+          {desktop ? (
+            <Tooltip title={expanded ? "Hide the menu labels" : "Show the menu labels"} placement="bottom">
+              <IconButton
+                aria-label={expanded ? "Collapse navigation" : "Expand navigation"}
+                aria-expanded={expanded}
+                aria-controls={RAIL_ID}
+                onClick={toggleRail}
+                sx={menuButtonSx}
+              >
+                {expanded ? <MenuOpenIcon /> : <MenuIcon />}
+              </IconButton>
+            </Tooltip>
+          ) : (
+            <IconButton aria-label="Open navigation" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)} sx={menuButtonSx}>
               <MenuIcon />
             </IconButton>
           )}
-          <Typography
-            variant="h6"
-            component="h1"
-            sx={{ fontWeight: 700, minHeight: 44, display: "flex", alignItems: "center" }}
-          >
-            <Box
-              component={RouterLink}
-              to="/"
-              aria-label="Retrainix, all projects"
-              sx={{
-                color: "inherit",
-                textDecoration: "none",
-                minHeight: 44,
-                display: "inline-flex",
-                alignItems: "center",
-              }}
-            >
-              Retrainix
-            </Box>
+        </Box>
+
+        <Typography component="h1" sx={{ alignSelf: "stretch", display: "flex", m: 0, fontSize: "inherit" }}>
+          <Brand />
+        </Typography>
+
+        <Box sx={{ flex: 1, minWidth: 0, px: { xs: 1.5, sm: 3 }, display: { xs: "none", sm: "block" } }}>
+          <Typography component="p" sx={{ fontSize: "0.75rem", color: rx.chromeMuted, lineHeight: 1.3 }}>
+            {pid ? "Project" : "Workspace"}
           </Typography>
-          <Box sx={{ flex: 1 }} />
-          {pid && <NotificationsBell pid={pid} />}
-        </Toolbar>
-      </AppBar>
+          <Typography component="p" noWrap sx={{ fontWeight: 600, lineHeight: 1.3 }}>
+            {pid ? (projectName ?? "…") : "All projects"}
+          </Typography>
+        </Box>
+        <Box sx={{ flex: 1, display: { xs: "block", sm: "none" } }} />
+
+        {pid && (
+          <Box sx={{ "& .MuiIconButton-root": { color: rx.chromeText, "&:hover": { bgcolor: rx.chromeHover }, "&.Mui-focusVisible": { outline: `3px solid ${rx.accent}`, outlineOffset: 2 } } }}>
+            <NotificationsBell pid={pid} />
+          </Box>
+        )}
+      </Box>
 
       {desktop ? (
-        <Drawer
-          variant="permanent"
+        <Box
+          id={RAIL_ID}
+          component="nav"
+          aria-label="Main"
           sx={{
-            width: DRAWER_WIDTH,
-            "& .MuiDrawer-paper": {
-              width: DRAWER_WIDTH,
-              boxSizing: "border-box",
-              border: "none",
-              bgcolor: "background.default",
-            },
+            position: "fixed",
+            inset: `${rx.headerHeight}px auto 0 0`,
+            zIndex: (t) => t.zIndex.appBar - 1,
+            width: railWidth,
+            px: 1.5,
+            py: 3,
+            bgcolor: rx.chrome,
+            color: rx.chromeText,
+            borderRight: `1px solid ${rx.chromeBorder}`,
+            overflowY: "auto",
+            transition: "width 160ms ease",
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
           }}
         >
-          <Toolbar />
-          {nav}
-        </Drawer>
+          <NavList destinations={destinations} showLabel={expanded} onNavigate={() => undefined} />
+          {expanded && <BrandFooter />}
+        </Box>
       ) : (
         <Drawer
           variant="temporary"
-          open={open}
-          onClose={() => setOpen(false)}
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
           ModalProps={{ keepMounted: true }}
-          sx={{
-            "& .MuiDrawer-paper": {
-              width: `min(${DRAWER_WIDTH}px, 86vw)`,
-              boxSizing: "border-box",
-              bgcolor: "background.default",
-              borderRadius: "0 16px 16px 0",
-            },
-          }}
+          slotProps={{ paper: { "aria-label": "Navigation" } }}
+          sx={{ "& .MuiDrawer-paper": { width: "min(280px, 86vw)", boxSizing: "border-box", bgcolor: rx.chrome, color: rx.chromeText, borderRadius: 0 } }}
         >
-          <Toolbar>
-            <Typography variant="h6" component="p" sx={{ fontWeight: 700 }}>
-              Retrainix
-            </Typography>
-          </Toolbar>
-          {nav}
+          <Box sx={{ height: rx.headerHeight, display: "flex", alignItems: "center", justifyContent: "space-between", pr: 1 }}>
+            <Brand onClick={() => setDrawerOpen(false)} />
+            <IconButton aria-label="Close navigation" onClick={() => setDrawerOpen(false)} sx={menuButtonSx}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+          <Box component="nav" aria-label="Main" sx={{ px: 1.5, py: 2, flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+            <NavList destinations={destinations} showLabel onNavigate={() => setDrawerOpen(false)} />
+            <BrandFooter />
+          </Box>
         </Drawer>
       )}
 
       <Box
         component="main"
+        id="main"
+        tabIndex={-1}
         sx={{
-          ml: { md: `${DRAWER_WIDTH}px` },
-          px: { xs: 2, sm: 3 },
-          pb: 6,
+          ml: desktop ? `${railWidth}px` : 0,
+          pt: `${rx.headerHeight}px`,
           minWidth: 0,
+          transition: "margin-left 160ms ease",
+          "&:focus": { outline: "none" },
         }}
       >
-        <Toolbar />
-        <Box sx={{ maxWidth: 1040, mx: "auto", pt: { xs: 2, sm: 3 } }}>
+        <Box sx={{ maxWidth: 1440, mx: "auto", p: { xs: 2, sm: 3, lg: 4 }, pb: { xs: 6, lg: 8 } }}>
           <Outlet />
         </Box>
       </Box>

@@ -122,7 +122,7 @@ def test_a_better_model_is_scored_on_the_same_hold_out_and_promoted(client, trai
     assert state["start_weights_bytes"] == b"seed weights"  # the first run starts from the seed weights
     # CircularNet's own input size and variant from models.yaml; batch and accumulation from agents.yaml.
     assert state["settings"] == {"imgsz": 432, "batch": 2, "variant": "RFDETRSegMedium", "grad_accum": 4, "max_minutes": 120.0}
-    assert "outlines" not in result and "outlines_error" not in result  # nothing is outlined before training any more
+    assert "outlines" not in result and "outlines_error" not in result  # no box lacked an outline, so nothing was drawn
     assert result["val_split_metrics"] == {"test_coco_eval_masks": 0.5}
     # Same exam as version 0: the same frozen hold-out frame, the same counts.
     assert (result["metrics"]["n_images"], result["metrics"]["n_objects_gold"]) == (baseline["n_images"], baseline["n_objects_gold"])
@@ -177,7 +177,7 @@ def test_the_next_run_starts_from_the_promoted_version_and_labels_with_it(client
     assert second["previous"] == {"version": 1, "map50": 1.0} and second["promoted"] is True  # equal is not worse
 
 
-def test_a_run_goes_from_export_to_scoring_with_no_outlining_stage(client, trainable, monkeypatch):
+def test_a_run_with_no_box_to_outline_goes_straight_from_export_to_scoring(client, trainable, monkeypatch):
     pid, job, _ = trainable
     job("holdout_check")
     job("qa")

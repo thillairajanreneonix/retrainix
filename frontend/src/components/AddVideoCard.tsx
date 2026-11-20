@@ -126,8 +126,9 @@ export default function AddVideoCard({
             Add video
           </Typography>
           <Typography color="text.secondary">
-            The video goes straight from this browser to storage. Frames are then sampled from it, and
-            near-duplicate and blurry frames are dropped.
+            The video goes straight from this browser to storage. Frames are then sampled from it,
+            near-duplicate and blurry frames are dropped, and the model labels the rest by itself, using the
+            class mapping above. The mapping cannot be changed after that.
           </Typography>
         </Box>
 
@@ -172,7 +173,7 @@ export default function AddVideoCard({
           {upload.phase === "requesting" && (
             <Box>
               <Typography sx={{ overflowWrap: "anywhere" }}>Preparing to upload {upload.filename}…</Typography>
-              <LinearProgress aria-label="Preparing the upload" sx={{ mt: 1, height: 8, borderRadius: "4px" }} />
+              <LinearProgress aria-label="Preparing the upload" sx={{ mt: 1, height: 8 }} />
             </Box>
           )}
           {upload.phase === "uploading" && (
@@ -182,7 +183,7 @@ export default function AddVideoCard({
                 variant="determinate"
                 value={percent}
                 aria-label={`Uploading ${upload.filename}`}
-                sx={{ mt: 1, height: 8, borderRadius: "4px" }}
+                sx={{ mt: 1, height: 8 }}
               />
               <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: 1.5 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -197,7 +198,7 @@ export default function AddVideoCard({
               <Typography sx={{ overflowWrap: "anywhere" }}>
                 {upload.filename} is uploaded. Starting frame extraction…
               </Typography>
-              <LinearProgress aria-label="Starting frame extraction" sx={{ mt: 1, height: 8, borderRadius: "4px" }} />
+              <LinearProgress aria-label="Starting frame extraction" sx={{ mt: 1, height: 8 }} />
             </Box>
           )}
           {upload.phase === "done" && (

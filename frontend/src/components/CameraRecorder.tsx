@@ -3,8 +3,10 @@ import { Alert, Box, Button, Typography } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import StopIcon from "@mui/icons-material/Stop";
 import VideocamOutlinedIcon from "@mui/icons-material/VideocamOutlined";
+import { rememberChosenCamera } from "../camera";
 import { formatBytes, formatTimestamp } from "../format";
 import { srOnly } from "./Step";
+import { rx } from "../theme";
 
 const MAX_RECORDING_MS = 10 * 60 * 1000;
 const BITS_PER_SECOND = 6_000_000;
@@ -218,7 +220,10 @@ export default function CameraRecorder({
         const has = (id: string | undefined): id is string => !!id && inputs.some((d) => d.id === id);
         if (inputs.length === 0) inputs = [{ id: s.deviceId ?? wantedDeviceId ?? "", label: track.label || "Camera 1" }];
         setDevices(inputs);
-        setDeviceId(has(wantedDeviceId) ? wantedDeviceId : has(s.deviceId) ? s.deviceId : inputs[0].id);
+        const chosen = has(wantedDeviceId) ? wantedDeviceId : has(s.deviceId) ? s.deviceId : inputs[0].id;
+        setDeviceId(chosen);
+        // The Dashboard shows this same camera live (see camera.ts); only its id and name are kept.
+        if (chosen) rememberChosenCamera({ id: chosen, label: inputs.find((d) => d.id === chosen)?.label ?? track.label ?? "Camera" });
 
         setCam({ phase: "preview" });
         setAnnounce(`Camera on: ${size} at ${rate}.`);
@@ -413,11 +418,11 @@ export default function CameraRecorder({
               position: "relative",
               width: "100%",
               maxWidth: 640,
-              bgcolor: "#16181a",
+              bgcolor: rx.annotationSurface,
               borderRadius: "12px",
               overflow: "hidden",
               lineHeight: 0,
-              outline: cam.phase === "recording" ? "3px solid #b3261e" : "none",
+              outline: cam.phase === "recording" ? `3px solid ${rx.error}` : "none",
             }}
           >
             <video
@@ -437,8 +442,8 @@ export default function CameraRecorder({
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 0.5,
-                  bgcolor: "#b3261e",
-                  color: "#ffffff",
+                  bgcolor: rx.error,
+                  color: rx.onStatus,
                   borderRadius: "8px",
                   px: 1,
                   py: 0.25,
@@ -477,7 +482,7 @@ export default function CameraRecorder({
                   border: "1px solid rgba(0,0,0,0.3)",
                   bgcolor: "background.paper",
                   color: "text.primary",
-                  "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 1 },
+                  "&:focus-visible": { outline: "2px solid", outlineColor: "primary.dark", outlineOffset: 1 },
                 }}
               >
                 {devices.map((d) => (
@@ -530,7 +535,7 @@ export default function CameraRecorder({
 
       {cam.phase === "recorded" && (
         <>
-          <Box sx={{ width: "100%", maxWidth: 640, bgcolor: "#16181a", borderRadius: "12px", overflow: "hidden", lineHeight: 0 }}>
+          <Box sx={{ width: "100%", maxWidth: 640, bgcolor: rx.annotationSurface, borderRadius: "12px", overflow: "hidden", lineHeight: 0 }}>
             <video
               src={cam.recording.url}
               controls

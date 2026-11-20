@@ -21,6 +21,14 @@ def client(tmp_path, monkeypatch) -> TestClient:
     settings.get_settings.cache_clear()
     deps.reset_for_tests()
 
+    from app import worker
+    from app.routes import live
+
+    # Uploads in most tests are followed by an explicit pre-label step; the automatic one
+    # (agents.yaml annotator_model.auto_after_upload) is switched on by the tests written for it.
+    monkeypatch.setattr(worker, "auto_prelabel_enabled", lambda config: False)
+    live.reset_for_tests()
+
     from app.main import create_app
 
     yield TestClient(create_app())

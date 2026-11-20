@@ -5,8 +5,10 @@ import { api, errorMessage, type GoldStatus, type Image, type LabelStatus, type 
 import { formatCount, formatTimestamp, plural } from "../format";
 import type { Load } from "../hooks";
 import FrameReviewDialog from "./FrameReviewDialog";
+import OutlinesNote from "./OutlinesNote";
 import { EmptyState, ErrorRow, LoadingRow } from "./States";
 import { StepTitle } from "./Step";
+import { rx } from "../theme";
 
 const PAGE_SIZE = 60;
 const THUMB_WIDTH = 320;
@@ -73,7 +75,7 @@ function Tile({ pid, image, onOpen }: { pid: string; image: Image; onOpen: () =>
         width: "100%",
         textAlign: "left",
         borderRadius: "12px",
-        "&:focus-visible": { outline: "3px solid", outlineColor: "primary.main", outlineOffset: 2 },
+        "&:focus-visible": { outline: "3px solid", outlineColor: "primary.dark", outlineOffset: 2 },
       }}
     >
       <Box
@@ -82,7 +84,7 @@ function Tile({ pid, image, onOpen }: { pid: string; image: Image; onOpen: () =>
         decoding="async"
         src={api.imageFileUrl(pid, image.id, THUMB_WIDTH)}
         alt=""
-        sx={{ display: "block", width: "100%", aspectRatio: ratio, objectFit: "cover", borderRadius: "12px", bgcolor: "#e3e8da" }}
+        sx={{ display: "block", width: "100%", aspectRatio: ratio, objectFit: "cover", borderRadius: "12px", bgcolor: rx.neutralSoft }}
       />
       <Typography component="span" variant="body2" sx={{ display: "block", mt: 0.5, fontWeight: 500 }}>
         {objects}
@@ -119,18 +121,17 @@ export default function FramesBrowser({
   gold,
   refreshKey,
   onReviewed,
+  onJobChanged,
 }: {
   project: Project;
   summary: Load<QaSummary>;
   gold: Load<GoldStatus>;
   refreshKey: number;
   onReviewed: () => void;
+  onJobChanged: () => void; // a job started here (outlines) began or finished
 }) {
   const pid = project.id;
   const s = summary.status === "ready" ? summary.data : null;
-  // Boxes with no outline, on frames that are not gold. A count only: nothing draws the outlines.
-  const boxOnlyObjects = s?.outlines?.objects_missing ?? 0;
-  const boxOnlyFrames = s?.outlines?.frames_missing ?? 0;
 
   const countFor = (status: LabelStatus): number | null => {
     const c = project.counts;
@@ -253,13 +254,7 @@ export default function FramesBrowser({
         Open a frame to see its labels drawn over the image, and to accept, correct or reject it.
       </Typography>
 
-      {boxOnlyObjects > 0 && (
-        <Typography color="text.secondary" sx={{ mb: 1 }}>
-          {plural(boxOnlyObjects, "box", "boxes")}
-          {boxOnlyFrames > 0 ? ` on ${plural(boxOnlyFrames, "frame", "frames")}` : ""}{" "}
-          {boxOnlyObjects === 1 ? "has" : "have"} no outline; a box without an outline is exported as its rectangle.
-        </Typography>
-      )}
+      <OutlinesNote pid={pid} summary={summary} onChanged={onJobChanged} />
 
       {chosen === null ? (
         <LoadingRow label="Loading the frame counts…" />

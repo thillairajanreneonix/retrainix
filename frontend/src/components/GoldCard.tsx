@@ -102,7 +102,7 @@ export default function GoldCard({
               variant="determinate"
               value={g.required_images > 0 ? (checked / g.required_images) * 100 : 0}
               aria-labelledby="gold-progress-label"
-              sx={{ mt: 0.75, height: 8, borderRadius: "4px" }}
+              sx={{ mt: 0.75, height: 8 }}
             />
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
               To check a frame, open it under Frames (step 6) and accept it or save your corrections.
@@ -154,8 +154,9 @@ export default function GoldCard({
           {(g.boxes_without_outline ?? 0) > 0 && (
             <Alert severity="info">
               {plural(g.boxes_without_outline ?? 0, "box", "boxes")} in the checked frames{" "}
-              {g.boxes_without_outline === 1 ? "has" : "have"} no outline. Boxes without an outline are exported as
-              rectangles.
+              {g.boxes_without_outline === 1 ? "has" : "have"} no outline. Draw outlines with SAM (step 6) before
+              freezing: gold frames cannot be changed afterwards, and a box left without an outline is exported as a
+              rectangle.
             </Alert>
           )}
 

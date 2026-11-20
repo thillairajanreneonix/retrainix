@@ -4,6 +4,7 @@ import PhotoLibraryOutlinedIcon from "@mui/icons-material/PhotoLibraryOutlined";
 import { api, errorMessage, type Asset, type Image } from "../api";
 import { formatCount, formatTimestamp, plural } from "../format";
 import { EmptyState, ErrorRow, LoadingRow } from "./States";
+import { rx } from "../theme";
 
 const PAGE_SIZE = 60;
 const THUMB_WIDTH = 320;
@@ -34,7 +35,7 @@ function Thumbnail({ pid, image, filename }: { pid: string; image: Image; filena
           aspectRatio: ratio,
           objectFit: "cover",
           borderRadius: "12px",
-          bgcolor: "#e3e8da",
+          bgcolor: rx.neutralSoft,
           color: "text.secondary",
           fontSize: 12,
         }}
@@ -50,7 +51,7 @@ function Thumbnail({ pid, image, filename }: { pid: string; image: Image; filena
 }
 
 /**
- * Thumbnail grid of the project's frames, 60 at a time. `total` is project.counts.frames;
+ * Thumbnail grid of the project's frames, 60 at a time. `total` is every frame of the project, gold ones included;
  * `refreshKey` changes whenever a job finishes, which re-reads the first page.
  */
 export default function FramesSection({

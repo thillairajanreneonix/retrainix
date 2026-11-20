@@ -45,7 +45,7 @@ seeded records) -> CircularNet fine-tuning -> email notifications -> the schedul
 manual retrain button). The section 2 fallback (Option D) still applies after those.
 
 
-### Amendment A2 - 20 Nov 2026, late evening (team lead; overrides A1.3 and the SAM outlines note above)
+### Amendment A2 - 20 Nov 2026, late evening (team lead; overrides A1.3)
 
 Instruction, as given: remove Ultralytics YOLO and the other models that are not Google's,
 and use CircularNet for the demo.
@@ -53,7 +53,7 @@ and use CircularNet for the demo.
 | # | Topic | Under A1 | Now |
 |---|---|---|---|
 | A2.1 | Models | Two seeded records; Ultralytics YOLO is the training path | One record: Google's CircularNet. It pre-labels and it is the model that is retrained. The Ultralytics YOLO record, its seed weights and its decoder are removed |
-| A2.2 | Outlines | MobileSAM outlines boxes a person draws | Removed (MobileSAM is not Google's). A box with no outline is exported as its rectangle; the screens count them |
+| A2.2 | Outlines | MobileSAM outlines boxes a person draws | **Kept.** It was removed with YOLO for about half an hour, then the team lead said: "don't remove the SAM because this is an annotation model". It is an annotation aid - it draws the shape of a box a person drew and nothing else. It is loaded through the `ultralytics` package, which therefore stays installed in the trainer image as a loader only; no YOLO model is used |
 | A2.3 | Dataset format | YOLO text labels | COCO segmentation in the layout CircularNet's training library reads (`train/`, `valid/`, `test/`) |
 | A2.4 | Training | Ultralytics on CPU | CircularNet fine-tuning with the `rfdetr` library on CPU, starting from a checkpoint rebuilt from Google's published ONNX |
 

@@ -234,10 +234,9 @@ def open_trained(path: Path, record: dict[str, Any], classes: list[str]) -> Onnx
     return OnnxModel(path, record["seed"]["decoder"], record["seed"]["input_size"], classes, TRAINED_FIRST_CLASS_INDEX)
 
 
-def active_model(
-    ctx: JobContext, project: dict[str, Any], cache_dir: Path
-) -> tuple[Any, dict[str, Any], dict[str, str]]:
-    """The model that labels for this project right now: (model, {recipe, version}, class map).
+def active_spec(project_id: str, project: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, str]]:
+    """Which model labels for this project right now, without opening it:
+    (the record to load, {recipe, version}, class map).
 
     Version 0 is the pre-label recipe's seed weights, read through the project's class map.
     A trained version speaks the project's own classes, so its map is the identity."""
@@ -246,15 +245,22 @@ def active_model(
     version = int(project.get("active_model_version") or 0)
     if version == 0:
         recipe = project["prelabel_recipe"]
-        model = load_model(ctx, model_spec(load_models(), recipe), cache_dir)
-        return model, {"recipe": recipe, "version": 0}, project.get("class_map") or {}
+        return model_spec(load_models(), recipe), {"recipe": recipe, "version": 0}, project.get("class_map") or {}
     recipe = project["recipe"]
     record = model_spec(load_models(), recipe)
-    key = f"projects/{ctx.project_id}/weights/v{version}/best.onnx"
+    key = f"projects/{project_id}/weights/v{version}/best.onnx"
     seed = {**record["seed"], "onnx_key": key, "first_class_index": TRAINED_FIRST_CLASS_INDEX}
     trained = {**record, "classes": project["classes"], "seed": seed}
     identity = {c: c for c in project["classes"]}
-    return load_model(ctx, trained, cache_dir), {"recipe": recipe, "version": version}, identity
+    return trained, {"recipe": recipe, "version": version}, identity
+
+
+def active_model(
+    ctx: JobContext, project: dict[str, Any], cache_dir: Path
+) -> tuple[Any, dict[str, Any], dict[str, str]]:
+    """The model that labels for this project right now: (model, {recipe, version}, class map)."""
+    record, which, class_map = active_spec(ctx.project_id, project)
+    return load_model(ctx, record, cache_dir), which, class_map
 
 
 def to_master_label(

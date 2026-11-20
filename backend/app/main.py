@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import errors
-from .routes import assets, projects, qa, train, work
+from .routes import assets, live, projects, qa, train, work
 from .settings import get_settings, load_agents_config, load_models
 
 
@@ -46,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(work.router)
     app.include_router(qa.router)
     app.include_router(train.router)
+    app.include_router(live.router)
     if settings.blob_backend == "local":
         app.include_router(assets.local_router)
         app.include_router(train.local_router)

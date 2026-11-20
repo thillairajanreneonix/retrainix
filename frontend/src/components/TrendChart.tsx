@@ -3,6 +3,7 @@ import { Box, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material"
 import type { ModelVersion } from "../api";
 import { formatCount, formatShare, plural, readNumber } from "../format";
 import { useElementWidth } from "../hooks";
+import { rx } from "../theme";
 
 export type MetricKey = "map50" | "map50_95" | "class_agreement" | "recall";
 
@@ -17,11 +18,13 @@ const HEIGHT = 300;
 const M = { top: 28, right: 20, bottom: 44, left: 40 };
 const TICKS = [0, 0.25, 0.5, 0.75, 1];
 const INSET = 28; // keeps the first and last points clear of the axis labels and the edge
-const LINE = "#386a20"; // the theme's primary; one series, so one colour
-const SURFACE = "#ffffff";
-const GRID = "#e4e7df";
-const INK = "#1c1c1c";
-const INK_MUTED = "#5c5f58";
+// One series, so one colour: the palette's chart line, chosen to stand clear of the card.
+const LINE = rx.chartLine;
+const SURFACE = rx.surface;
+const GRID = rx.border;
+const INK = rx.text;
+const INK_MUTED = rx.muted;
+const BASELINE = rx.neutralInk; // the starting weights' score: neutral and dashed, never the accent
 
 type Point = { version: ModelVersion; value: number; x: number; y: number; active: boolean; hollow: boolean };
 
@@ -98,6 +101,10 @@ export default function TrendChart({
         }${activePoint ? ` Active version: v${activePoint.version.version}.` : ""} The versions table below has every figure.`
       : `${metricLabel} by model version: no version has this figure yet.`;
 
+  // The starting weights (version 0) as a reference line, once there is something to compare with it.
+  const seedPoint = points.find((p) => p.version.trigger === "seed") ?? null;
+  const baseline = seedPoint && points.length > 1 ? seedPoint : null;
+
   const hovered = hover !== null ? (points.find((p) => p.version.version === hover) ?? null) : null;
 
   return (
@@ -154,12 +161,38 @@ export default function TrendChart({
             );
           })}
 
+          {baseline && (
+            <g>
+              <line
+                x1={M.left}
+                x2={width - M.right}
+                y1={baseline.y}
+                y2={baseline.y}
+                stroke={BASELINE}
+                strokeWidth={1.5}
+                strokeDasharray="6 5"
+              />
+              <text
+                x={width - M.right}
+                y={baseline.y - 6 < M.top ? baseline.y + 14 : baseline.y - 6}
+                textAnchor="end"
+                fontSize={12}
+                fill={BASELINE}
+                stroke={SURFACE}
+                strokeWidth={3}
+                paintOrder="stroke"
+              >
+                starting weights, v{baseline.version.version}
+              </text>
+            </g>
+          )}
+
           {points.length > 1 && (
             <polyline
               points={points.map((p) => `${p.x},${p.y}`).join(" ")}
               fill="none"
               stroke={LINE}
-              strokeWidth={2}
+              strokeWidth={2.5}
               strokeLinejoin="round"
               strokeLinecap="round"
             />
@@ -216,8 +249,9 @@ export default function TrendChart({
               left: Math.min(Math.max(hovered.x - 90, 4), Math.max(width - 184, 4)),
               top: hovered.y > HEIGHT / 2 ? hovered.y - 96 : hovered.y + 20,
               width: 180,
-              bgcolor: "#23261f",
-              color: "#ffffff",
+              bgcolor: rx.surfaceRaised,
+              border: `1px solid ${rx.borderStrong}`,
+              color: rx.text,
               borderRadius: "8px",
               px: 1.25,
               py: 1,
@@ -255,6 +289,17 @@ export default function TrendChart({
           </Box>
         ))}
       </Box>
+
+      {baseline && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+          <svg width={24} height={24} aria-hidden style={{ flexShrink: 0 }}>
+            <line x1={1} x2={23} y1={12} y2={12} stroke={BASELINE} strokeWidth={1.5} strokeDasharray="6 5" />
+          </svg>
+          <Typography variant="body2" color="text.secondary">
+            dashed line: the score of the starting weights, before any training
+          </Typography>
+        </Box>
+      )}
 
       <Typography sx={{ overflowWrap: "anywhere" }}>
         {nImages === null

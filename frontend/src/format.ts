@@ -88,3 +88,18 @@ const FORMAT_NAMES: Record<string, string> = { coco_json: "COCO segmentation JSO
 export function datasetFormatName(format: string): string {
   return FORMAT_NAMES[format] ?? format;
 }
+
+type FrameCounts = { frames?: number; predicted?: number; gold_exemplar?: number; gold_holdout?: number } | null | undefined;
+
+/**
+ * Frames the project holds, the gold ones included. `counts.frames` alone is not that number:
+ * at a gold freeze the gold frames leave `counts.frames` and `counts.predicted` (docs/api.md).
+ */
+export function framesInProject(counts: FrameCounts): number {
+  return (counts?.frames ?? 0) + (counts?.gold_exemplar ?? 0) + (counts?.gold_holdout ?? 0);
+}
+
+/** Frames that carry labels: the ones the model has labelled, plus the gold ones (labels a person checked). */
+export function framesWithLabels(counts: FrameCounts): number {
+  return Math.min(counts?.predicted ?? 0, counts?.frames ?? 0) + (counts?.gold_exemplar ?? 0) + (counts?.gold_holdout ?? 0);
+}

@@ -59,9 +59,10 @@ human annotations), so the gold set has to be made by a person before any accura
 **Second amendment, 20 Nov late evening - `docs/plan.md` Amendment A2.** The team lead's
 instruction: remove Ultralytics YOLO and the other models that are not Google's, and use
 CircularNet for the demo. So there is ONE model now, Google's CircularNet: it pre-labels and
-it is the model that is retrained. The Ultralytics YOLO recipe, its seed weights, its decoder
-and MobileSAM (the outline step) are gone from the product. Sections below that still
-describe YOLO or SAM measurements are kept as the record of what was measured, and say so.
+it is the model that is retrained. The Ultralytics YOLO recipe, its seed weights and its
+decoder are gone from the product. **MobileSAM stays** as an annotation aid (it was removed
+and put back the same night - see "SAM outlines as built"). Sections below that still
+describe YOLO measurements are kept as the record of what was measured, and say so.
 
 Two things to keep honest whenever this is described:
 
@@ -134,6 +135,17 @@ cd backend && uv export --no-dev --no-hashes --no-emit-project -o requirements.t
 - When `frontend/dist` exists, the API serves it, so `http://localhost:8080` is the whole app -
   the same arrangement as the container. Run `npm run build` again to refresh it.
 - Health is served on `/api/health` and `/healthz`. Rely on `/api/health` once deployed.
+- **The look of the app** (redesigned on the night of 20 Nov by a second session, at the team
+  lead's request - recorded here as that session reported it): one design system in
+  `frontend/src/theme.ts` (tokens `rx`): the UI master template of 20 Nov - charcoal top bar
+  and rail, orange accent, light page, Inter bundled. The file also keeps the Reneonix dark
+  green palette; `ACTIVE` picks one (the team lead tried green, then asked for the template's
+  orange again). Screens take colours from it and shared layout pieces from
+  `components/ui.tsx`. The front page is `pages/DashboardPage.tsx`; its belt view shows either
+  the camera chosen on Project setup, live in the browser (a picture only - not recorded, not
+  sent, not labelled; remembered per browser in localStorage, `frontend/src/camera.ts`), or a
+  stored frame with its labels. Checked with a stand-in camera only, not a real webcam. Routes: `/` is the newest project's dashboard, the project list is at
+  `/projects`. plan.md section 12's Material-green look is superseded.
 
 This folder sits inside OneDrive. `node_modules/` currently lives in it and installs worked; if
 they start failing on locked files, pause the sync - the dashboard project hit the same problem
@@ -289,8 +301,8 @@ reason until the one before has run):
   later runs start from the active version's own checkpoint (`weights/v<n>/best.pt`).
 - **The dataset is COCO**, in the layout the library reads (`train/`, `valid/`, `test/`,
   each with `_annotations.coco.json` beside its images), 432 x 432, category ids 1-based.
-  A box with no outline is exported as its rectangle - nothing draws outlines for
-  hand-drawn boxes since MobileSAM was removed. The screens count those boxes.
+  A box with no outline is exported as its rectangle; the SAM outline step exists so that
+  hand-drawn boxes get a real outline first. The screens count the boxes still waiting.
 - **Settings**, from `config/agents.yaml` `trainer`: 3 epochs, batch 2 with gradients
   accumulated over 4 steps (the dashboard's CircularNet setting), one image size, no test
   pass (the exam is the gold hold-out, scored afterwards by the app's own `evaluator.score`).
@@ -299,8 +311,17 @@ reason until the one before has run):
   export, most of it fixed cost (building the model, validation, export); peak memory
   4.7 GB. The library writes about 2 GB of checkpoints per run, which on Cloud Run is held
   in memory - inside the trainer job's 16 GiB, but worth knowing.
+- **The whole loop ran locally through the app (20 Nov, 23:18-23:29 IST, the app started from
+  an environment that also carries `rfdetr`):** 43 frames, pre-label, a 30-frame gold set,
+  hold-out check, then a `train` job: 29 training + 3 validation frames, 1 epoch, 6.28 min of
+  training, 395 s for the whole job including export and scoring. The new version scored
+  mAP50 0.03 against the stock model's 0.12 on the hold-out and was correctly NOT promoted.
+  **Those scores mean nothing as accuracy**: the "gold" was the model's own boxes with a few
+  classes renamed by a script to satisfy the five-per-class rule. What the run proves is the
+  machinery - export, fine-tune, ONNX, the trained model's class indexes, scoring, the
+  promotion rule. It also shows that one short pass does not automatically beat the start.
 - **The trainer image is defined but NOT built.** `workers/trainer/Dockerfile.base` now
-  installs CPU PyTorch + `rfdetr==1.5.2` + OpenCV 4 (the dashboard found rfdetr needs OpenCV
+  installs CPU PyTorch + `rfdetr==1.5.2` + `ultralytics` (the SAM loader) + OpenCV 4 (the dashboard found rfdetr needs OpenCV
   below 5, so the API's OpenCV 5 pin is left out of that image). The same package set was
   installed together on the build PC and the worker, the trainer and `rfdetr` all import.
   Cloud Build has not built it: the project's billing was off when it was written. The
@@ -329,15 +350,97 @@ reason until the one before has run):
 - History: until A2 the trainer fine-tuned Ultralytics YOLO (live on 20 Nov: 22 frames, 3
   epochs, 0.48 min, correctly not promoted against a stand-in gold set). That code is gone.
 
-## Outlines for hand-drawn boxes - removed
+## SAM outlines as built (kept through Amendment A2)
 
-On the evening of 20 Nov a MobileSAM step drew outlines for boxes a person draws in review
-(job type `outline`, live-tested at 2 boxes in 13.8 s). MobileSAM is not Google's, so
-Amendment A2 removed it the same night: `agents/outliner.py` is deleted and the job type
-answers 422. What is left are counts (`missing_outlines`, `boxes_without_outline`, the QA
-summary's `outlines`), so the screens can say how many objects will be exported as
-rectangles. A Google route for this exists on paper - MediaPipe Interactive Segmenter - and
-has not been tried.
+Added on the evening of 20 Nov at the team lead's request. It was removed with YOLO at about
+23:05 IST and put back by 23:45 IST after the team lead said "don't remove the SAM because
+this is an annotation model". It is MobileSAM prompted by a box - the camera dashboard's
+method - and it does one thing: draw the outline of an object that has a box and no outline
+(`agents/outliner.py`, job type `outline`).
+
+- **It is an annotation aid, not a model of the product.** SAM decides the shape only. Class,
+  box, score and `source` are never changed; the object gains `outline_source: sam`. The
+  outline is clipped to its box plus `box_pad_px`. CircularNet is still the only model that
+  labels and the only one that is trained.
+- **It is loaded through the `ultralytics` package** (`from ultralytics import SAM`), so that
+  package is still installed in the trainer image - as a loader for SAM and nothing else; no
+  YOLO weights, recipe or decoder exist in the product. If someone asks whether Ultralytics
+  is used, the honest answer is: the library is installed for MobileSAM, no YOLO model runs.
+  The AGPL-3.0 licence of that library is therefore still a question for a commercial
+  product. Loading MobileSAM from its own repository instead was tried and was blocked by
+  this session's permission rules (it means installing code straight from GitHub).
+- It runs only in the trainer image (`app/jobs.py` routes `outline` there with `train`).
+  `run_sam` is the only place it is imported; tests replace it.
+- Gold frames are read-only after the freeze, so they are never outlined then. Outlines for
+  gold frames have to be drawn before freezing; `GoldStatus.boxes_without_outline` says how
+  many are waiting, and the UI warns but does not block.
+- A `train` job draws missing outlines itself before it exports (stage `outlining`). If SAM
+  fails there, training continues and the export writes those boxes as rectangles.
+- Installing `ultralytics` pulls the non-headless OpenCV 5 over the OpenCV 4 that `rfdetr`
+  needs (seen on the build PC), so `workers/trainer/Dockerfile.base` pins both OpenCV
+  packages below 5.
+- Measured earlier (before A2): on a laptop CPU about 3 s for a frame with 40 boxes and
+  0.8 s for one box; 12 of 12 outlines stayed inside their boxes. Live on Cloud Run in the
+  old project: 2 hand-drawn boxes outlined in 13.8 s, the whole job in 31 s.
+- NOT measured: whether these outlines make the trained model any better than rectangles.
+- NOT built: SAM 3 (text prompts; still gated and still no GPU), and SAM refining the outlines
+  the model already draws.
+
+## Verified live in project `retrainix` (21 Nov 2026, 00:13-00:20 IST)
+
+One run through the public API of the deployed site, version `ac0ab1c-202611201836`, project
+`p_ae51d9` ("zz live check ..."). **Its gold set is a stand-in made by a script** (the model's
+own boxes with a few classes renamed), so every score in it is plumbing, not accuracy.
+
+| Step | Result |
+|---|---|
+| Upload through the signed URL | 58 MB in 26 s |
+| `extract_frames` (worker job) | 65 sampled, 43 kept, job 16 s |
+| `prelabel`, CircularNet (worker job) | 627 objects (623 plastic, 4 metal), 229 unmapped dropped, 0.81 s per frame, job 47 s |
+| Gold freeze + `holdout_check` | 10-frame hold-out; job 21 s |
+| `outline`, MobileSAM (trainer job) | 2 hand-drawn boxes, 11 s of work, job 62 s |
+| Gemini | `/api/gemini/status` ok through Vertex AI; QA dry run estimates 66 calls for 11 frames. **No real Gemini QA run has been made in this project** |
+| `train`, CircularNet (trainer job, 8 vCPU) | 1 epoch: 2.44 min of training, 176 s for the whole job; scored on the hold-out, correctly NOT promoted; weights link works |
+
+So CircularNet is proven to run in the deployment, for labelling and for training. Still NOT
+done by anyone: a real gold set made by a person, a real Gemini QA run here, a browser
+walkthrough of the live site (this session's browser was not allowed to open it), a real
+camera, and a scheduled retrain actually firing.
+
+## Everything that comes in goes to the model (added 21 Nov, 00:20 IST)
+
+The team lead's words, relayed by the second session: take CircularNet as the primary model,
+and whatever camera stream comes in or video is uploaded, send it to this model.
+
+- **Uploads and recordings are labelled without a button.** `app/worker.py` `label_new_frames`
+  starts a `prelabel` job (`trigger: auto`) when `extract_frames` succeeds, unless one is
+  already queued or running (`annotator_model.auto_after_upload`). Tests switch it off by
+  default in `conftest.py` and on in `tests/test_live_and_auto.py`.
+- **The cost of that:** the class map is locked once frames are labelled, so it can no longer
+  be reviewed between upload and labelling. With stock CircularNet about a quarter of the
+  detections map to no project class and are dropped; fixing the map now has to happen when
+  the project is created.
+- **A live view can be labelled a frame at a time:** `POST /api/projects/{pid}/predict`
+  (`app/routes/live.py`) takes one picture, runs the project's active model inside the web
+  service and stores nothing. One at a time per instance (429 when busy). The service went
+  from 1 vCPU / 1 GiB to 2 vCPU / 2 GiB for it. It is a frame every few seconds, not
+  real-time video - say it that way.
+- **How `/predict` keeps the model.** The opened model is kept in memory by the storage key of
+  its weights, one at a time: every project still on Google's published CircularNet shares one
+  copy, and a project's own trained version has its own key, so one project can never be
+  answered with another's model. The class map is read from the project on every request.
+  The model runs in a worker thread, so the service keeps answering other requests and a
+  second caller gets 429 instead of queueing. (`annotator.active_spec` says which model is
+  active without opening it; `active_model` opens it for jobs.)
+- **Measured live, 21 Nov 00:25 IST, version `ac0ab1c-202611201850`:** `/predict` on a
+  1280 x 800 JPEG of 88 KB took 5.8 s for the first picture (fetching and opening the model),
+  then about 1.5 s each, of which 1.2-1.4 s is the model on 2 vCPU; the project's counts and
+  state were unchanged afterwards. A 10 MB clip uploaded to a new project (`p_21c931`) was cut
+  into 4 frames and labelled by itself 29 s after the upload finished (`trigger: auto`). That
+  version still ran the model on the event loop; the worker-thread version went live with the
+  next deploy.
+- The retrain timer's signed call reached the new site at 00:30 IST (scheduler status OK). A
+  scheduled retrain actually starting has still not been seen.
 
 ## Camera recording as built (added 20 Nov 2026, evening)
 
@@ -367,14 +470,37 @@ has not been tried.
 
 ## Google Cloud - what exists (measured 20 Nov 2026)
 
-**Billing went off on the evening of 20 Nov.** At 22:49 IST every billing account this login
-can see was closed (`open: false`), including "GDP Event Credit: Startup Buildathon -
-Chennai" that the project is linked to; the live site answers 503 and most gcloud calls
-answer "billing to be enabled". The bucket still listed. The team lead says the event
-credits expired and another person's credits will be used. Nothing can be deployed until an
-open billing account is linked to this project (that person grants this login "Billing
-Account User" on it), or the app is set up in a project of theirs with `GCP_PROJECT_ID`
-and `SERVICE_URL` overridden. **The CircularNet-only version has never been deployed.**
+**The live project is `retrainix` (number 111360744309) since 21 Nov 2026, 00:10 IST. The
+table and the notes further down that name `desktop-application-515217` describe the OLD
+project and are kept as history.**
+
+| | |
+|---|---|
+| Project | `retrainix`, on another person's credits (owners: the team lead's login and one other) - spend carefully |
+| Live app | https://retrainix-111360744309.asia-south1.run.app (also https://retrainix-jjxymtd5ma-el.a.run.app) - Cloud Run service `retrainix`, **public, no sign-in** |
+| Jobs | `retrainix-worker` (4 vCPU, 4 GiB), `retrainix-trainer` (8 vCPU, 16 GiB), scheduler `retrainix-tick` every 15 min |
+| Bucket | `gs://retrainix-data-retrainix`, `asia-south1`, public access prevented; `seed/` holds the CircularNet ONNX, the rebuilt CircularNet checkpoint and MobileSAM |
+| Database | Firestore `(default)`, Native mode, `asia-south1` - started empty |
+| API identity | `retrainix-api@retrainix.iam.gserviceaccount.com` |
+
+How it got here, because the ids changed three times in one night:
+
+- 20 Nov 22:49 IST: every billing account the team lead's login could see was closed,
+  including the event credit account of `desktop-application-515217`. That site went dead
+  (503, then 500). Its data is still in its bucket and Firestore; nothing was moved.
+- About 23:20: the team lead named `retrainix`. 23:45-00:05: bootstrap, model files copied,
+  trainer image built (base image 6 min, code image 1 min - the first Cloud Build of the
+  rfdetr + SAM-loader Dockerfile, and it passed first time).
+- 23:58: "deploy in my own project, credits arrive at midnight". 00:10: "those credits are
+  not claimable, keep it in the other person". So `infra/env.sh` defaults to `retrainix`.
+- 21 Nov 00:06-00:13 IST: `infra/deploy.sh --apply` (service, worker, scheduler) and
+  `infra/deploy_trainer.sh --apply`, version `ac0ab1c-202611201836`.
+- **Gemini answers in `retrainix` through Vertex AI** (one text call, 20 Nov 23:53 IST), with
+  no API key; the `gemini-api-key` secret exists and is empty. That it works here shows the
+  refusal in the old project was tied to that project or its billing account, not the code.
+  `teacher_qa.gemini_parallel` was lowered from 12 to 4 as a precaution - a guess at being
+  gentler, not a known fix. If calls return 403, stop; do not retry in a loop.
+- GPU quota in `retrainix` has NOT been checked; training is the CPU job either way.
 
 | | |
 |---|---|

@@ -80,4 +80,15 @@ run "$GCLOUD" secrets add-iam-policy-binding "$GEMINI_KEY_SECRET" \
   --member "serviceAccount:$API_SA_EMAIL" --role roles/secretmanager.secretAccessor \
   --project "$GCP_PROJECT_ID" --quiet
 
+echo "== 10. A place for the container images (Artifact Registry)"
+# `gcloud run deploy --source` creates this repository itself on first use. It is created here
+# so the trainer image can be built before the web service has ever been deployed.
+# COST NOTE: Artifact Registry is billed by stored GB beyond a small free allowance; the
+# trainer image is a few GB.
+if exists artifacts repositories describe cloud-run-source-deploy --location "$GCP_REGION"; then
+  echo "   exists"
+else
+  g artifacts repositories create cloud-run-source-deploy --repository-format docker     --location "$GCP_REGION" --description "Cloud Run Source Deployments"
+fi
+
 echo "== done"

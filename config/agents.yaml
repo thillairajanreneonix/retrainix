@@ -123,6 +123,8 @@ agents:
     input: image, project_classes, class_map
     output: boxes, masks_if_available, scores
     cross_class_nms_iou: 0.7                          # suggested default: two different classes on boxes overlapping more than this are one object; the higher score is kept
+    auto_after_upload: true                           # team lead, 21 Nov 2026: whatever is uploaded or recorded goes to the model. Pre-labelling starts by itself when a video's frames are ready
+    live_max_image_mb: 2                              # suggested default: largest picture POST /predict accepts (one camera frame as JPEG is far smaller)
     profiles:                                         # tried in order; a retry moves to the next one
       default:        {conf: 0.35, tiled: false}      # suggested default
       tiled_lowconf:  {conf: 0.20, tiled: true, tile_cols: 3, tile_rows: 2, tile_overlap: 0.2, nms_iou: 0.5}   # suggested default; tiling values are the camera dashboard's
@@ -132,6 +134,22 @@ agents:
       - write results in the master label format with source=model and the label_model that produced them
       - on retry use the next profile and apply the class fixes from teacher_qa
       - never write to an image with a gold role
+
+  outliner_sam:                                       # added 20 Nov 2026 at the team lead's request; kept through Amendment A2 (it is an annotation aid, not the model that is trained)
+    mvp: true
+    uses_llm: false
+    model: mobile_sam                                 # MobileSAM, as in the camera dashboard's annotate_with_sam.py
+    weights_key: "seed/sam/mobile_sam.pt"             # path inside the bucket
+    box_pad_px: 4                                     # suggested default: an outline may reach this far outside its box, no further
+    input: image, boxes
+    output: outlines
+    rules:
+      - draw an outline only where an object has a box and none; never replace an outline that exists
+      - SAM decides the shape only - class, box, score and source stay as they were
+      - mark each outline it draws with outline_source=sam
+      - never write to a gold image; outlines for gold frames are drawn before the freeze
+      - runs on CPU in the trainer image (measured 20 Nov - about 3 s for a frame with 40 boxes)
+      - MobileSAM is loaded through the ultralytics package, which is therefore still installed in the trainer image - as a loader for SAM only; no YOLO model is used anywhere
 
   teacher_qa:
     mvp: true
@@ -149,7 +167,7 @@ agents:
       min_fix_confidence: medium              # suggested default: Gemini remarks below this confidence change nothing (low | medium | high)
       max_object_area_ratio: 0.5              # suggested default: a box covering more than this share of the frame fails the rule check
       added_object_max_iou: 0.3               # suggested default: on a retry, a newly found object is added only if it overlaps no existing one by more than this
-      gemini_parallel: 12                     # suggested default: Gemini calls in flight at once (one call measured at ~23 s, 20 Nov)
+      gemini_parallel: 4                                # lowered from 12 on 20 Nov as a precaution after the old project's unexplained Gemini refusal; not a known fix
     response_schema:
       verdict: [pass, fail]
       class_ok: boolean
