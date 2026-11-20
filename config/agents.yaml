@@ -123,6 +123,7 @@ agents:
     input: image, project_classes, class_map
     output: boxes, masks_if_available, scores
     cross_class_nms_iou: 0.7                          # suggested default: two different classes on boxes overlapping more than this are one object; the higher score is kept
+    class_synonyms: {paper: [fiber], metal: [aluminium]}   # other names a material goes by, used only when no project class is named after the model's material (team lead 21 Nov: demo project has four classes)
     auto_after_upload: true                           # team lead, 21 Nov 2026: whatever is uploaded or recorded goes to the model. Pre-labelling starts by itself when a video's frames are ready
     live_max_image_mb: 2                              # suggested default: largest picture POST /predict accepts (one camera frame as JPEG is far smaller)
     profiles:                                         # tried in order; a retry moves to the next one
@@ -183,6 +184,7 @@ agents:
       - record model id, prompt version, round and verdict for every image
 
   human_review_router:
+    manual_seconds_per_outline: 60                    # ASSUMPTION, not measured: time for a person to outline one object by hand. Used only for the 'annotation minutes saved' estimate; replace with the team's own timing
     mvp: true
     uses_llm: false
     input: failed_images
@@ -243,3 +245,8 @@ agents:
     output: messages
     events: [dataset_ready, training_done, needs_human_review, pipeline_failed]
     channels: [in_app]                                # stretch: email
+
+# The project the site creates when none exists (team lead, 21 Nov 2026). More classes can be given when a project is created; adding classes to an existing project is not built.
+project_defaults:
+  name: retrainix-demo
+  classes: [plastic, glass, metal, paper]

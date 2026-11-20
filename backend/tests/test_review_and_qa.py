@@ -439,3 +439,17 @@ def test_rule_checks_fail_an_oversized_box_without_asking_gemini():
     thresholds = load_agents_config()["agents"]["teacher_qa"]["thresholds"]
     # o1 covers most of the frame; o2 is a model object with no outline. A box a person drew (o3) is fine.
     assert teacher_qa.cheap_checks(label, image, thresholds) == ["o1", "o2"]
+
+
+def test_archived_projects_are_not_served_and_the_saving_is_an_estimate(client, labelled):
+    from app import deps
+
+    pid, ids = labelled
+    saving = client.get(f"/api/projects/{pid}/qa/summary").json()["annotation_saving"]
+    # 7 frames, each with two outlined objects from the stand-in model.
+    assert saving["machine_outlines"] == 14 and saving["assumed_seconds_per_outline"] == 60 and saving["minutes"] == 14.0
+    assert "estimate" in saving["basis"]
+    deps.get_store().update(f"projects/{pid}", {"archived": True})
+    assert client.get(f"/api/projects/{pid}").status_code == 404
+    assert client.get(f"/api/projects/{pid}/images").status_code == 404
+    assert pid not in [p["id"] for p in client.get("/api/projects").json()["projects"]]

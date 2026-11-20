@@ -84,6 +84,23 @@ def gemini_status() -> dict[str, Any]:
     return gemini.status()
 
 
+def _annotation_saving(store: Any, project_id: str) -> dict[str, Any]:
+    """An ESTIMATE of hand-outlining time the machine's outlines replace: every object that
+    has an outline got it from the model or from SAM, not from a person. The seconds per
+    outline is an assumption from agents.yaml, not a measurement, and the time people spend
+    reviewing is not subtracted."""
+    seconds = float(load_agents_config()["agents"]["human_review_router"]["manual_seconds_per_outline"])
+    images = [i for i in store.list(f"projects/{project_id}/images") if i.get("label_status") not in (None, "none", "rejected")]
+    outlines = sum(max(0, int(i.get("object_count") or 0) - int(i.get("missing_outlines") or 0)) for i in images)
+    return {
+        "machine_outlines": outlines,
+        "frames": len(images),
+        "assumed_seconds_per_outline": seconds,
+        "minutes": round(outlines * seconds / 60, 1),
+        "basis": "estimate: outlines drawn by the model or SAM x an assumed time to draw one by hand; review time not subtracted",
+    }
+
+
 @router.get("/projects/{project_id}/qa/summary")
 def qa_summary(project_id: str) -> dict[str, Any]:
     project = get_project_or_404(project_id)
@@ -113,6 +130,7 @@ def qa_summary(project_id: str) -> dict[str, Any]:
         "n_images": checked,
         "last_qa": last_qa,
         "gemini_calls": {"used": project.get("gemini_calls_used", 0), "cap": cap},
+        "annotation_saving": _annotation_saving(store, project_id),
         "outlines": {
             "frames_missing": len(no_outline),
             "objects_missing": sum(int(i.get("missing_outlines") or 0) for i in no_outline),

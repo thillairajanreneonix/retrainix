@@ -47,7 +47,12 @@ def test_create_project_rejects_bad_input_with_the_error_shape(client):
         r = client.post("/api/projects", json=body)
         assert r.status_code == 422, body
         assert set(r.json()["error"]) == {"code", "message"}
-    assert client.get("/api/projects").json()["projects"] == []  # a refused request leaves nothing behind
+    # A refused request leaves nothing behind: the only project is the default one the site makes when it is empty.
+    only = client.get("/api/projects").json()["projects"]
+    assert [p["name"] for p in only] == ["retrainix-demo"] and only[0]["classes"] == ["plastic", "glass", "metal", "paper"]
+    mapped = set(only[0]["class_map"].values())
+    assert mapped == {"plastic", "glass", "metal", "paper"} and only[0]["class_map"]["Fiber_Paper"] == "paper"
+    assert only[0]["class_map"]["Aluminium_Can"] == "metal"
     assert client.post("/api/projects", json=base).status_code == 201  # the base itself is a valid project
 
 

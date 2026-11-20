@@ -195,7 +195,9 @@ def predict_tiled(
 
 
 # --- class map ----------------------------------------------------------------------
-def suggest_class_map(model_classes: list[str], project_classes: list[str]) -> dict[str, str]:
+def suggest_class_map(
+    model_classes: list[str], project_classes: list[str], synonyms: dict[str, list[str]] | None = None
+) -> dict[str, str]:
     """Map a model class to a project class when the project class name appears in the
     model class's material part - the text before the first "_". So "Plastics-HDPE_Bottle"
     becomes "plastic", while "Fiber_Cup-&-glass" does not become "glass"."""
@@ -207,6 +209,13 @@ def suggest_class_map(model_classes: list[str], project_classes: list[str]) -> d
             if project_class.lower() in material:
                 mapping[name] = project_class
                 break
+        else:
+            # No class is named after this material: try the other names it goes by
+            # (agents.yaml class_synonyms, e.g. the model's "Fiber" is a project's "paper").
+            for project_class in by_length:
+                if any(word in material for word in (synonyms or {}).get(project_class.lower(), [])):
+                    mapping[name] = project_class
+                    break
     return mapping
 
 

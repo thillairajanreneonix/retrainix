@@ -56,7 +56,7 @@ def _check_class_map(
 
 def get_project_or_404(project_id: str) -> dict[str, Any]:
     project = get_store().get(f"projects/{project_id}")
-    if project is None:
+    if project is None or project.get("archived"):  # an archived project is kept in storage but not served
         raise not_found("The project")
     return project
 
@@ -64,6 +64,16 @@ def get_project_or_404(project_id: str) -> dict[str, Any]:
 @router.get("/models")
 def list_models() -> dict[str, Any]:
     return {"models": load_models()}
+
+
+def ensure_default_project() -> None:
+    """The site never opens empty: when no project exists, the default one from
+    agents.yaml (project_defaults) is created, with the only model."""
+    defaults = load_agents_config().get("project_defaults") or {}
+    if not defaults.get("name"):
+        return
+    recipe = load_models()[0]["id"]
+    create_project(ProjectCreate(name=defaults["name"], classes=defaults["classes"], recipe=recipe, prelabel_recipe=recipe))
 
 
 @router.post("/projects", status_code=201)
@@ -84,7 +94,8 @@ def create_project(body: ProjectCreate) -> dict[str, Any]:
     prelabel_classes = models[body.prelabel_recipe]["classes"]
     _check_class_map(body.class_map, prelabel_classes, classes)
     # No map given: fill it by name, and say so, so the user knows to check it.
-    class_map = body.class_map or annotator.suggest_class_map(prelabel_classes, classes)
+    synonyms = load_agents_config()["agents"]["annotator_model"].get("class_synonyms") or {}
+    class_map = body.class_map or annotator.suggest_class_map(prelabel_classes, classes, synonyms)
     class_map_source = "user" if body.class_map else "name_match"
 
     store = get_store()
@@ -115,7 +126,10 @@ def create_project(body: ProjectCreate) -> dict[str, Any]:
 
 @router.get("/projects")
 def list_projects() -> dict[str, Any]:
-    projects = get_store().list("projects")
+    projects = [p for p in get_store().list("projects") if not p.get("archived")]
+    if not projects:
+        ensure_default_project()
+        projects = [p for p in get_store().list("projects") if not p.get("archived")]
     projects.sort(key=lambda p: p.get("created_at", ""), reverse=True)
     return {"projects": projects}
 
