@@ -320,7 +320,7 @@ title(s, "Prototype links and status")
 text(s, 40, 95, 640, 280, [
     "Live prototype||  https://retrainix-111360744309.asia-south1.run.app",
     "Version||  0.1 (tagged 21 Nov 2026), deployed on Google Cloud, region Mumbai",
-    "Code repository||  [team to add]",
+    "Code repository||  https://github.com/thillairajanreneonix/retrainix",
     "Demo video||  [team to add]",
     "",
     "Verified on the deployed prototype||  upload, frame extraction, CircularNet labelling, gold set, exam scoring, MobileSAM outlines, dataset export, CircularNet retraining, scoring and the promotion rule, labelling of a single camera frame",
